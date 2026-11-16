@@ -142,10 +142,10 @@ HourForge observes the following privacy and operational principles:
 
 ---
 
-## Notes and risks
+## Notes
 
 - **Affiliation**: HourForge is an independent open-source project and is not affiliated with, endorsed by, or associated with Valve, Kuro Games, Hotta Studio, Impressions or Discord.
-- **Terms of Service & Usage Risk**: Artificially increasing playtime may violate the terms of some services and could lead to action, at the user's own risk. HourForge is provided for personal scheduling and testing.
+- **Terms of Service**: HourForge is provided for personal scheduling and testing. It does not change or affect any data on Steam except user playtime.
 
 ---
 
