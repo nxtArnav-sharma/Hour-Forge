@@ -1,0 +1,207 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: transparent;
+  background: transparent;
+  color: #F1F5F9;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Webkit Drag for Frameless Electron Window */
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* ==========================================================================
+   LIQUID GLASS DESIGN SYSTEM TOKENS & SURFACES
+   ========================================================================== */
+
+/* Main glass surface container */
+.liquid-glass-container {
+  background: 
+    radial-gradient(550px circle at -5% -5%, rgba(139, 92, 246, 0.18), transparent 70%),
+    radial-gradient(550px circle at 105% 105%, rgba(6, 182, 212, 0.15), transparent 70%),
+    radial-gradient(120% 120% at 50% 0%, rgba(20, 26, 42, 0.70) 0%, rgba(8, 11, 17, 0.78) 100%);
+  position: relative;
+}
+
+/* Reusable Glass Card (lightweight, NO per-card backdrop-filter for 60fps & 0% idle CPU) */
+.liquid-glass-card {
+  background: rgba(18, 25, 40, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1), 0 4px 20px 0 rgba(0, 0, 0, 0.3);
+  border-radius: 16px;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              background 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.liquid-glass-card:hover {
+  border-color: rgba(168, 85, 247, 0.28);
+  background: rgba(23, 32, 50, 0.75);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.15), 0 8px 30px 0 rgba(0, 0, 0, 0.45);
+}
+
+/* Hero / Highlighted Glass Card */
+.liquid-glass-card-glow {
+  background: linear-gradient(135deg, rgba(28, 36, 58, 0.75) 0%, rgba(16, 22, 36, 0.7) 100%);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.18), 0 0 25px -3px rgba(139, 92, 246, 0.25);
+  border-radius: 16px;
+}
+
+/* Glass Pill Badge */
+.liquid-glass-pill {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+}
+
+/* Primary Glass Button */
+.liquid-glass-btn-primary {
+  background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.35), 0 4px 16px -2px rgba(139, 92, 246, 0.45);
+  color: #FFFFFF;
+  font-weight: 500;
+  border-radius: 12px;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.liquid-glass-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #9333EA 0%, #4F46E5 100%);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.45), 0 6px 22px -2px rgba(139, 92, 246, 0.6);
+  transform: translateY(-1px);
+}
+
+.liquid-glass-btn-primary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.liquid-glass-btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Secondary / Ghost Glass Button */
+.liquid-glass-btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+  color: #E2E8F0;
+  font-weight: 500;
+  border-radius: 12px;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.liquid-glass-btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #FFFFFF;
+}
+
+.liquid-glass-btn-secondary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* Glass Form Inputs */
+.liquid-glass-input {
+  background: rgba(11, 15, 24, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  border-radius: 12px;
+  color: #F1F5F9;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.liquid-glass-input:focus {
+  outline: none;
+  border-color: rgba(168, 85, 247, 0.6);
+  box-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.4), 0 0 0 2px rgba(168, 85, 247, 0.2);
+}
+
+/* Ambient Background Orb Animations */
+@keyframes ambient-float-1 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.12;
+  }
+  50% {
+    transform: translate3d(30px, 20px, 0) scale(1.08);
+    opacity: 0.18;
+  }
+}
+
+@keyframes ambient-float-2 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.10;
+  }
+  50% {
+    transform: translate3d(-25px, -15px, 0) scale(1.06);
+    opacity: 0.16;
+  }
+}
+
+.ambient-orb-purple {
+  animation: ambient-float-1 24s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.ambient-orb-cyan {
+  animation: ambient-float-2 28s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .ambient-orb-purple,
+  .ambient-orb-cyan {
+    animation: none !important;
+  }
+  .liquid-glass-card {
+    transition: none !important;
+  }
+  .liquid-glass-btn-primary,
+  .liquid-glass-btn-secondary {
+    transition: none !important;
+    transform: none !important;
+  }
+}
