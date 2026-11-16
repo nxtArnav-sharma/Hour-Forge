@@ -3,6 +3,7 @@ import { AtomicStore } from '../store/atomicStore';
 import { TrackStateMachine } from '../../core/track';
 import { HumanProfile, RunMode, TrackOverlay } from '../../core/types';
 import { RunStateSnapshot, TrackSnapshot } from '../../shared/models';
+import { validateRunOptions } from '../../shared/runSchema';
 
 export interface StartRunOptions {
   mode: RunMode;
@@ -83,21 +84,33 @@ export class HourForgeEngine {
   }
 
   async startRun(options: StartRunOptions): Promise<void> {
+    const games = await this.store.getGames();
+    const goals = options.mode === 'CATCHUP' ? await this.store.getGoals() : [];
+    const valid = validateRunOptions(options, games, goals);
+
     if (this.status === 'RUNNING' || this.status === 'STARTING') {
       await this.stopRun();
     }
 
+    // Stop any previous helper processes before starting a run
+    try {
+      if (typeof (this.backend as any).killAllHelpers === 'function') {
+        await (this.backend as any).killAllHelpers();
+      }
+      await this.backend.setPlaying([]);
+    } catch {
+      // ignore
+    }
+
     this.runId = `run_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    this.mode = options.mode;
+    this.mode = valid.mode as RunMode;
     this.profile = options.profile;
-    this.runSeed = options.runSeed || `seed_${Date.now()}`;
-    this.t0Utc = Date.now() + (options.delayMs || 0);
-    this.status = options.delayMs ? 'STARTING' : 'RUNNING';
+    this.runSeed = valid.runSeed || `seed_${Date.now()}`;
+    this.t0Utc = Date.now() + (valid.delayMs || 0);
+    this.status = valid.delayMs ? 'STARTING' : 'RUNNING';
 
     this.tracks.clear();
-    // Enforce SINGLE mode contains at most one track (Bug fix R6)
-    const tracksToRun = options.mode === 'SINGLE' ? options.tracks.slice(0, 1) : options.tracks;
-    for (const t of tracksToRun) {
+    for (const t of valid.tracks) {
       const targetSec = t.targetHours ? Math.round(t.targetHours * 3600) : undefined;
       const dailySec = t.dailyQuotaHours ? Math.round(t.dailyQuotaHours * 3600) : undefined;
       const sm = new TrackStateMachine({

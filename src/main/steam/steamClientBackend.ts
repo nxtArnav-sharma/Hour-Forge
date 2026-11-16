@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import { shell } from 'electron';
 import { BackendEvent, BackendStatus, SteamBackend } from '../../shared/backend';
 import { SteamDetector, SteamClientStatus } from './steamDetector';
-import { cleanupPidFileWithVerification } from './processSweep';
+import { cleanupPidFileWithVerification, verifyIsHourForgeHelper, queryWindowsProcessInfo } from './processSweep';
 
 export interface HelperProcessInstance {
   appId: number;
@@ -23,6 +23,8 @@ export interface SteamClientBackendOptions {
   onNotification?: (title: string, message: string) => void;
   onLog?: (line: string) => void;
   pollIntervalMs?: number;
+  getProcessInfo?: (pid: number) => Promise<{ executablePath?: string; commandLine?: string } | null>;
+  killProcess?: (pid: number) => void;
 }
 
 export class SteamClientBackend implements SteamBackend {
@@ -35,6 +37,8 @@ export class SteamClientBackend implements SteamBackend {
   private onNotification?: (title: string, message: string) => void;
   private onLog?: (line: string) => void;
   private pollIntervalMs: number;
+  private getProcessInfo?: (pid: number) => Promise<{ executablePath?: string; commandLine?: string } | null>;
+  private killProcess?: (pid: number) => void;
 
   private activeHelpers: Map<number, HelperProcessInstance> = new Map();
   private desiredPlayingAppIds: number[] = [];
@@ -61,6 +65,8 @@ export class SteamClientBackend implements SteamBackend {
     this.onNotification = options.onNotification;
     this.onLog = options.onLog;
     this.pollIntervalMs = options.pollIntervalMs || 2500;
+    this.getProcessInfo = options.getProcessInfo;
+    this.killProcess = options.killProcess;
   }
 
   private log(message: string): void {
@@ -286,16 +292,35 @@ export class SteamClientBackend implements SteamBackend {
 
     this.activeHelpers.delete(appId);
     try {
-      if (helper.child.connected) {
+      if (helper.child && helper.child.connected) {
         helper.child.send('stop');
       }
-      setTimeout(() => {
-        try {
-          process.kill(helper.pid, 'SIGTERM');
-        } catch {
-          // ignore
-        }
-      }, 500);
+    } catch {
+      // ignore
+    }
+
+    const allowedDirs = [
+      path.dirname(this.execPath),
+      path.resolve(this.helpersDir, '..'),
+      this.helpersDir
+    ];
+
+    const getProc = this.getProcessInfo || queryWindowsProcessInfo;
+    const doKill = this.killProcess || ((pid: number) => {
+      try {
+        process.kill(pid, 'SIGTERM');
+      } catch {
+        // ignore
+      }
+    });
+
+    try {
+      const procInfo = await getProc(helper.pid);
+      if (procInfo && verifyIsHourForgeHelper(procInfo, allowedDirs)) {
+        doKill(helper.pid);
+      } else {
+        this.log(`Refusing to kill PID ${helper.pid}: process is not an HourForge steamHelper`);
+      }
     } catch {
       // ignore
     }
@@ -332,7 +357,9 @@ export class SteamClientBackend implements SteamBackend {
         await cleanupPidFileWithVerification({
           pidPath,
           helpersDir: this.helpersDir,
-          allowedDirs
+          allowedDirs,
+          getProcessInfo: this.getProcessInfo,
+          killProcess: this.killProcess
         });
       }
     } catch {

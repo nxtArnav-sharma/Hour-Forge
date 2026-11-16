@@ -12,6 +12,7 @@ import {
   Monitor
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
+import { CREDIT_TEXT } from '../../shared/credit';
 
 export const OnboardingWizard: React.FC = () => {
   const settings = useStore(state => state.settings);
@@ -248,6 +249,13 @@ export const OnboardingWizard: React.FC = () => {
                     className="rounded bg-[#0B0E14] border-[#232B3D] text-purple-600 focus:ring-0"
                   />
                 </label>
+
+                <div className="p-3 bg-[#0B0E14]/80 border border-white/[0.08] rounded-xl flex items-center justify-between text-xs">
+                  <div>
+                    <span className="text-[11px] font-medium text-slate-300 block">{CREDIT_TEXT}</span>
+                    <span className="text-[10px] text-slate-500 font-mono block">Free and open source software</span>
+                  </div>
+                </div>
               </div>
             </div>
           )}

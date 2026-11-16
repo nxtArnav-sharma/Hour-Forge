@@ -115,10 +115,11 @@ export interface GameEntry {
   name: string;
   developer: string;
   publisher: string;
-  headerImage: string;
+  headerImage?: string;
   isOwned?: boolean;
-  processNames: string[];
+  processNames?: string[];
   defaultHours?: number;
+  enabled?: boolean;
 }
 
 export interface TrackSnapshot {

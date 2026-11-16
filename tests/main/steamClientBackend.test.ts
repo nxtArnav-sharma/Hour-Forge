@@ -303,6 +303,74 @@ describe('SteamClientBackend Lifecycle & Helper Management', () => {
 
     await backend.stop();
   });
+
+  it('killAllHelpers() terminates genuine helpers and leaves unrelated processes untouched', async () => {
+    const installDir = path.join(tempDir, 'install');
+    fs.mkdirSync(installDir, { recursive: true });
+    const fakeExecPath = path.join(installDir, 'HourForge.exe');
+
+    const killedPids: number[] = [];
+    const mockKillProcess = vi.fn((pid: number) => {
+      killedPids.push(pid);
+    });
+
+    const processTable: Record<number, { executablePath: string; commandLine: string }> = {
+      2001: {
+        executablePath: fakeExecPath,
+        commandLine: `"${fakeExecPath}" "${path.join(helpersDir, 'steamHelper.js')}" 2139460`
+      },
+      2002: {
+        executablePath: 'C:\\Windows\\System32\\notepad.exe',
+        commandLine: 'C:\\Windows\\System32\\notepad.exe my_notes.txt'
+      },
+      2003: {
+        executablePath: 'C:\\Python310\\python.exe',
+        commandLine: 'C:\\Python310\\python.exe check_steamHelper.py'
+      }
+    };
+
+    const mockGetProcessInfo = vi.fn(async (pid: number) => {
+      return processTable[pid] || null;
+    });
+
+    fs.writeFileSync(path.join(helpersDir, '2139460.pid'), '2001', 'utf-8');
+    fs.writeFileSync(path.join(helpersDir, '3513350.pid'), '2002', 'utf-8');
+    fs.writeFileSync(path.join(helpersDir, '4508340.pid'), '2003', 'utf-8');
+
+    const fakeDetector = new SteamDetector({});
+    vi.spyOn(fakeDetector, 'getStatus').mockResolvedValue({
+      isInstalled: true,
+      isRunning: true,
+      isLoggedOn: true,
+      pid: 1234,
+      activeUser: 9999,
+      personaName: 'Gamer'
+    });
+
+    const backend = new SteamClientBackend({
+      detector: fakeDetector,
+      helpersDir,
+      helperScriptPath: fakeHelperScript,
+      execPath: fakeExecPath,
+      getProcessInfo: mockGetProcessInfo,
+      killProcess: mockKillProcess,
+      pollIntervalMs: 100
+    });
+
+    await backend.killAllHelpers();
+
+    // Genuine helper (2001) MUST be killed
+    expect(killedPids).toContain(2001);
+
+    // Unrelated processes MUST survive untouched:
+    expect(killedPids).not.toContain(2002); // notepad survived
+    expect(killedPids).not.toContain(2003); // python script survived
+
+    // Stale pidfiles must be unlinked
+    expect(fs.existsSync(path.join(helpersDir, '2139460.pid'))).toBe(false);
+    expect(fs.existsSync(path.join(helpersDir, '3513350.pid'))).toBe(false);
+    expect(fs.existsSync(path.join(helpersDir, '4508340.pid'))).toBe(false);
+  });
 });
 
 describe('Engine Bug Fixes (SINGLE Mode & Today Credited Playtime)', () => {
@@ -328,16 +396,30 @@ describe('Engine Bug Fixes (SINGLE Mode & Today Credited Playtime)', () => {
     const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hf_engine_bug_'));
     const store = new AtomicStore(testDir);
     await store.initialize();
+    await store.saveGames([
+      { appId: 3513350, name: 'WuWa', developer: 'Kuro', publisher: 'Kuro', enabled: true },
+      { appId: 4508340, name: 'NTE', developer: 'Hotta', publisher: 'PWG', enabled: true }
+    ]);
 
     const mockBackend = createMockBackend();
     const engine = new HourForgeEngine(mockBackend, store);
 
+    // Rejects >1 track for SINGLE mode
+    await expect(
+      engine.startRun({
+        mode: 'SINGLE',
+        tracks: [
+          { appId: 3513350, targetHours: 2 },
+          { appId: 4508340, targetHours: 3 }
+        ],
+        profile: BUILTIN_PROFILES['regular']!
+      })
+    ).rejects.toThrow();
+
+    // Runs exactly 1 track
     await engine.startRun({
       mode: 'SINGLE',
-      tracks: [
-        { appId: 3513350, targetHours: 2 },
-        { appId: 4508340, targetHours: 3 }
-      ],
+      tracks: [{ appId: 3513350, targetHours: 2 }],
       profile: BUILTIN_PROFILES['regular']!
     });
 
@@ -354,6 +436,9 @@ describe('Engine Bug Fixes (SINGLE Mode & Today Credited Playtime)', () => {
     const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hf_today_test_'));
     const store = new AtomicStore(testDir);
     await store.initialize();
+    await store.saveGames([
+      { appId: 3513350, name: 'WuWa', developer: 'Kuro', publisher: 'Kuro', enabled: true }
+    ]);
 
     const mockBackend = createMockBackend();
     const engine = new HourForgeEngine(mockBackend, store);

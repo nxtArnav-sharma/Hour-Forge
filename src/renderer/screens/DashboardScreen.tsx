@@ -205,7 +205,15 @@ export const DashboardScreen: React.FC = () => {
           <div>
             <h2 className="text-lg font-semibold text-white flex items-center gap-2">
               {isRunning
-                ? `Running (${engineState?.mode} mode)`
+                ? (engineState?.mode === 'DEDICATED'
+                    ? 'Dedicated Run'
+                    : engineState?.mode === 'CATCHUP'
+                    ? 'Catch-Up Run'
+                    : engineState?.mode === 'SINGLE'
+                    ? 'Single Game Run'
+                    : engineState?.mode === 'MULTI'
+                    ? 'Multi-Game Run'
+                    : `Running (${engineState?.mode})`)
                 : isPaused
                 ? 'Run Paused'
                 : 'No Active Run'}
@@ -279,7 +287,7 @@ export const DashboardScreen: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {engineState.tracks.map(track => {
-              const game = games.find(g => g.appId === track.appId);
+              const game = games.find(g => g.appId === track.appId && g.enabled !== false);
               const isPlaying = track.state === 'PLAYING';
               const isResting = track.state === 'RESTING';
               const isBlocked = track.overlay === 'BLOCKED';
@@ -343,7 +351,7 @@ export const DashboardScreen: React.FC = () => {
 
                     <div className="absolute bottom-2 left-3">
                       <h4 className="text-sm font-semibold text-white drop-shadow">
-                        {game?.name || `App ${track.appId}`}
+                        {game?.name || 'Game Not in Library'}
                       </h4>
                       <p className="text-[11px] text-slate-300 font-mono">
                         App ID: {track.appId}

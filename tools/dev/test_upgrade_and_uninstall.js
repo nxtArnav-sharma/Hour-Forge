@@ -5,6 +5,7 @@ const path = require('path');
 const throwawayDir = 'C:\\HourForge_Throwaway';
 const installer010 = path.resolve(__dirname, '../../release/HourForge-Setup-0.1.0-alpha.exe');
 const installer011 = path.resolve(__dirname, '../../release/HourForge-Setup-0.1.1.exe');
+const installer012 = path.resolve(__dirname, '../../release/HourForge-Setup-0.1.2.exe');
 const tempDir = process.env.TEMP;
 
 console.log('=== STARTING UPGRADE & UNINSTALL TEST ===');
@@ -25,23 +26,23 @@ if (fs.existsSync(throwawayDir)) {
   fs.rmSync(throwawayDir, { recursive: true, force: true });
 }
 
-// 2. Install 0.1.0-alpha
-console.log('\n2. Installing 0.1.0-alpha silently into', throwawayDir);
-execSync(`powershell -Command "Start-Process -FilePath '${installer010}' -ArgumentList '/S /D=${throwawayDir}' -Wait"`);
-
-if (!fs.existsSync(path.join(throwawayDir, 'HourForge.exe'))) {
-  throw new Error('0.1.0-alpha install failed: HourForge.exe not found');
-}
-console.log('   0.1.0-alpha installed successfully.');
-
-// 3. Upgrade to 0.1.1 over existing installation
-console.log('\n3. Upgrading to 0.1.1 over existing directory...');
+// 2. Install 0.1.1
+console.log('\n2. Installing 0.1.1 silently into', throwawayDir);
 execSync(`powershell -Command "Start-Process -FilePath '${installer011}' -ArgumentList '/S /D=${throwawayDir}' -Wait"`);
 
 if (!fs.existsSync(path.join(throwawayDir, 'HourForge.exe'))) {
-  throw new Error('0.1.1 upgrade failed: HourForge.exe not found');
+  throw new Error('0.1.1 install failed: HourForge.exe not found');
 }
-console.log('   0.1.1 upgraded successfully.');
+console.log('   0.1.1 installed successfully.');
+
+// 3. Upgrade to 0.1.2 over existing installation
+console.log('\n3. Upgrading to 0.1.2 over existing directory...');
+execSync(`powershell -Command "Start-Process -FilePath '${installer012}' -ArgumentList '/S /D=${throwawayDir}' -Wait"`);
+
+if (!fs.existsSync(path.join(throwawayDir, 'HourForge.exe'))) {
+  throw new Error('0.1.2 upgrade failed: HourForge.exe not found');
+}
+console.log('   0.1.2 upgraded successfully.');
 
 // 4. Verify native steamworks and helper unpacked outside asar
 console.log('\n4. Verifying asar unpacking...');

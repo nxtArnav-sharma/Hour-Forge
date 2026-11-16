@@ -19,11 +19,13 @@ import {
   RotateCcw,
   FileCheck,
   X,
-  Radio
+  Radio,
+  Info
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { AppSettings } from '../../shared/models';
 import { BackupPreview, AutoBackupInfo } from '../../shared/backupSchema';
+import { CREDIT_TEXT, APP_REPO_URL } from '../../shared/credit';
 import happyPheobe1x from '../assets/ads/Happy_Pheobe_80.png';
 import happyPheobe2x from '../assets/ads/Happy_Pheobe_160.png';
 import pheobeSob1x from '../assets/ads/Pheobe_Sob_80.png';
@@ -959,6 +961,41 @@ export const SettingsScreen: React.FC = () => {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+
+        {/* About HourForge & Author Credit */}
+        <div className="liquid-glass-card p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-300 uppercase tracking-wider">
+              <Info className="w-4 h-4 text-purple-400" />
+              About HourForge
+            </div>
+            <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/20 font-mono font-medium">
+              v0.1.2
+            </span>
+          </div>
+
+          <p className="text-sm font-medium text-slate-200">
+            {CREDIT_TEXT}
+          </p>
+
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Autonomous Windows system tray supervisor and humanized Steam playtime scheduler. Free and open source software.
+          </p>
+
+          <div className="pt-1 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => window.hourforge.system.openExternal(APP_REPO_URL)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 liquid-glass-btn-secondary text-xs font-medium text-purple-300 hover:text-white"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              GitHub Repository
+            </button>
+            <span className="text-[11px] text-slate-500 font-mono">
+              {APP_REPO_URL}
+            </span>
           </div>
         </div>
       </div>

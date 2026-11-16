@@ -206,9 +206,7 @@ describe('AtomicStore M9 ASF cleanup & secure storage', () => {
     expect(settings.firstRunCompleted).toBe(false);
 
     const games = await store.getGames();
-    expect(games.length).toBe(2);
-    expect(games[0]!.appId).toBe(3513350); // Wuthering Waves
-    expect(games[1]!.appId).toBe(4508340); // NTE
+    expect(games.length).toBe(0);
 
     const profiles = await store.getProfiles();
     expect(profiles.length).toBeGreaterThan(0);

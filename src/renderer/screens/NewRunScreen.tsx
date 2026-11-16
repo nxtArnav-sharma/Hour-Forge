@@ -21,18 +21,41 @@ export const NewRunScreen: React.FC = () => {
   const goals = useStore(state => state.goals);
   const pacingReports = useStore(state => state.pacingReports);
   const startRun = useStore(state => state.startRun);
+  const navigate = useStore(state => state.navigate);
+
+  const enabledGames = React.useMemo(() => games.filter(g => g.enabled !== false), [games]);
 
   const [mode, setMode] = useState<RunMode>('DEDICATED');
-  const [selectedAppIds, setSelectedAppIds] = useState<number[]>([3513350, 4508340]); // WuWa & NTE default
-  const [quotas, setQuotas] = useState<Record<number, number>>({
-    3513350: 1, // 1 hour WuWa
-    4508340: 2  // 2 hours NTE
-  });
+  const [selectedAppIds, setSelectedAppIds] = useState<number[]>([]);
+  const [quotas, setQuotas] = useState<Record<number, number>>({});
   const [selectedProfileId, setSelectedProfileId] = useState<string>('regular');
   const [previewSeed, setPreviewSeed] = useState<number>(Date.now());
   const [countdown, setCountdown] = useState<number | null>(
     settings?.launchPickerCountdownSec ? settings.launchPickerCountdownSec : null
   );
+  const [initializedFromTemplate, setInitializedFromTemplate] = useState<boolean>(false);
+
+  // Initialize selection from default template if present and valid in library
+  useEffect(() => {
+    if (!initializedFromTemplate && enabledGames.length > 0) {
+      if (settings?.defaultTemplate?.appIds) {
+        const valid = settings.defaultTemplate.appIds.filter(id => enabledGames.some(g => g.appId === id));
+        if (valid.length > 0) {
+          setSelectedAppIds(valid);
+          if (settings.defaultTemplate.targets) {
+            const initialQuotas: Record<number, number> = {};
+            for (const id of valid) {
+              if (settings.defaultTemplate.targets[id]) {
+                initialQuotas[id] = settings.defaultTemplate.targets[id] / 3600;
+              }
+            }
+            setQuotas(initialQuotas);
+          }
+        }
+      }
+      setInitializedFromTemplate(true);
+    }
+  }, [enabledGames, settings, initializedFromTemplate]);
 
   // Auto-start countdown logic
   useEffect(() => {
@@ -41,7 +64,9 @@ export const NewRunScreen: React.FC = () => {
       setCountdown(c => {
         if (c === null || c <= 1) {
           clearInterval(timer);
-          handleStart();
+          if (validationError === null) {
+            handleStart();
+          }
           return 0;
         }
         return c - 1;
@@ -51,6 +76,46 @@ export const NewRunScreen: React.FC = () => {
   }, [countdown]);
 
   const selectedProfile = profiles.find(p => p.id === selectedProfileId) || profiles[0]!;
+
+  // Validation logic
+  const validationError = React.useMemo<string | null>(() => {
+    if (enabledGames.length === 0) return 'Add a game first (library is empty)';
+    if (selectedAppIds.length === 0) return 'Select at least one game';
+    if (mode === 'SINGLE') {
+      if (selectedAppIds.length !== 1) return 'Select exactly 1 game for Single Game mode';
+    } else if (mode === 'MULTI') {
+      if (selectedAppIds.length < 2 || selectedAppIds.length > 10) return 'Select between 2 and 10 games for Multi-Game mode';
+    } else if (mode === 'DEDICATED') {
+      if (selectedAppIds.length < 1 || selectedAppIds.length > 10) return 'Select between 1 and 10 games';
+      for (const id of selectedAppIds) {
+        const q = quotas[id];
+        if (typeof q !== 'number' || isNaN(q) || q <= 0) {
+          const gName = enabledGames.find(g => g.appId === id)?.name || `App ${id}`;
+          return `Enter target hours (> 0) for ${gName}`;
+        }
+      }
+    } else if (mode === 'CATCHUP') {
+      if (selectedAppIds.length < 1 || selectedAppIds.length > 10) return 'Select between 1 and 10 games';
+      for (const id of selectedAppIds) {
+        if (!goals.some(g => g.appId === id)) {
+          const gName = enabledGames.find(g => g.appId === id)?.name || `App ${id}`;
+          return `Game ${gName} has no active Catch-Up Goal`;
+        }
+      }
+    }
+    return null;
+  }, [enabledGames, selectedAppIds, mode, quotas, goals]);
+
+  // Live selection summary
+  const summaryText = React.useMemo(() => {
+    const names = selectedAppIds
+      .map(id => enabledGames.find(g => g.appId === id)?.name)
+      .filter(Boolean) as string[];
+
+    if (names.length === 0) return 'No games selected';
+    if (names.length === 1) return `1 game selected: ${names[0]}`;
+    return `${names.length} games selected: ${names.join(', ')}`;
+  }, [selectedAppIds, enabledGames]);
 
   // Generate live Gantt preview blocks for first selected track
   const previewBlocks = React.useMemo<Block[]>(() => {
@@ -79,7 +144,7 @@ export const NewRunScreen: React.FC = () => {
   const selectMode = (newMode: RunMode) => {
     setMode(newMode);
     if (newMode === 'CATCHUP') {
-      const goalAppIds = goals.map(g => g.appId);
+      const goalAppIds = goals.map(g => g.appId).filter(id => enabledGames.some(g => g.appId === id));
       if (goalAppIds.length > 0) {
         setSelectedAppIds(goalAppIds);
       }
@@ -94,21 +159,25 @@ export const NewRunScreen: React.FC = () => {
       return;
     }
     if (selectedAppIds.includes(appId)) {
-      if (selectedAppIds.length > 1) {
-        setSelectedAppIds(selectedAppIds.filter(id => id !== appId));
-      }
+      setSelectedAppIds(selectedAppIds.filter(id => id !== appId));
+      setQuotas(prev => {
+        const next = { ...prev };
+        delete next[appId];
+        return next;
+      });
     } else {
       setSelectedAppIds([...selectedAppIds, appId]);
     }
   };
 
   const setGameQuota = (appId: number, hours: number) => {
-    setQuotas({ ...quotas, [appId]: Math.max(0.5, Math.min(24, hours)) });
+    setQuotas(prev => ({ ...prev, [appId]: hours }));
   };
 
   const handleStart = async () => {
-    const effectiveAppIds = mode === 'SINGLE' ? selectedAppIds.slice(0, 1) : selectedAppIds;
-    const tracks = effectiveAppIds.map(appId => {
+    if (validationError !== null) return;
+
+    const tracks = selectedAppIds.map(appId => {
       if (mode === 'CATCHUP') {
         const goal = goals.find(g => g.appId === appId);
         const rep = pacingReports[appId];
@@ -120,7 +189,7 @@ export const NewRunScreen: React.FC = () => {
       }
       return {
         appId,
-        targetHours: mode === 'DEDICATED' ? quotas[appId] || 1 : undefined
+        targetHours: mode === 'DEDICATED' ? quotas[appId] : undefined
       };
     });
 
@@ -221,55 +290,83 @@ export const NewRunScreen: React.FC = () => {
         <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
           2. Select Games & Targets
         </label>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {games.map(game => {
-            const isSelected = selectedAppIds.includes(game.appId);
-            const quota = quotas[game.appId] || game.defaultHours || 1;
+        {enabledGames.length === 0 ? (
+          <div className="liquid-glass-card p-8 text-center space-y-3">
+            <Gamepad className="w-10 h-10 text-slate-500 mx-auto" />
+            <h3 className="text-sm font-semibold text-white">Your Games Library is Empty</h3>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              Add Steam games to your library before starting a grinding run.
+            </p>
+            <button
+              onClick={() => navigate('games')}
+              className="px-5 py-2 text-xs font-semibold liquid-glass-btn-primary mx-auto"
+            >
+              Add a Game First
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {enabledGames.map(game => {
+              const isSelected = selectedAppIds.includes(game.appId);
+              const quotaVal = quotas[game.appId];
 
-            return (
-              <div
-                key={game.appId}
-                className={`p-3.5 rounded-2xl transition-all flex items-center justify-between ${
-                  isSelected
-                    ? 'liquid-glass-card-glow border-purple-400/40 shadow-[0_0_15px_rgba(139,92,246,0.18)]'
-                    : 'liquid-glass-card'
-                }`}
-              >
+              return (
                 <div
-                  onClick={() => toggleGame(game.appId)}
-                  className="flex items-center gap-3 cursor-pointer flex-1"
+                  key={game.appId}
+                  className={`p-3.5 rounded-2xl transition-all flex items-center justify-between ${
+                    isSelected
+                      ? 'liquid-glass-card-glow border-purple-400/40 shadow-[0_0_15px_rgba(139,92,246,0.18)]'
+                      : 'liquid-glass-card'
+                  }`}
                 >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => {}}
-                    className="rounded-md bg-[#080B11] border-white/20 text-purple-600 focus:ring-0"
-                  />
-                  <div>
-                    <h4 className="text-sm font-medium text-white">{game.name}</h4>
-                    <p className="text-[11px] text-slate-400 font-mono">App ID {game.appId}</p>
-                  </div>
-                </div>
-
-                {isSelected && mode === 'DEDICATED' && (
-                  <div className="flex items-center gap-1.5 ml-4">
-                    <span className="text-xs text-slate-400">Target:</span>
+                  <div
+                    onClick={() => toggleGame(game.appId)}
+                    className="flex items-center gap-3 cursor-pointer flex-1"
+                  >
                     <input
-                      type="number"
-                      min={0.5}
-                      max={24}
-                      step={0.5}
-                      value={quota}
-                      onChange={e => setGameQuota(game.appId, parseFloat(e.target.value) || 1)}
-                      className="w-16 bg-[#0B0E14] border border-[#232B3D] rounded-md px-2 py-1 text-xs font-mono text-right text-white focus:outline-none focus:border-purple-500"
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {}}
+                      className="rounded-md bg-[#080B11] border-white/20 text-purple-600 focus:ring-0"
                     />
-                    <span className="text-xs text-slate-400">hrs</span>
+                    <div>
+                      <h4 className="text-sm font-medium text-white">{game.name}</h4>
+                      <p className="text-[11px] text-slate-400 font-mono">App ID {game.appId}</p>
+                    </div>
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+
+                  {isSelected && mode === 'DEDICATED' && (
+                    <div className="flex items-center gap-1.5 ml-4">
+                      <span className="text-xs text-slate-400">Target:</span>
+                      <input
+                        type="number"
+                        min={0.5}
+                        max={24}
+                        step={0.5}
+                        placeholder="hrs"
+                        value={quotaVal !== undefined ? quotaVal : ''}
+                        onChange={e => {
+                          const val = parseFloat(e.target.value);
+                          if (isNaN(val) || val <= 0) {
+                            setQuotas(prev => {
+                              const next = { ...prev };
+                              delete next[game.appId];
+                              return next;
+                            });
+                          } else {
+                            setGameQuota(game.appId, Math.min(24, val));
+                          }
+                        }}
+                        className="w-16 bg-[#0B0E14] border border-[#232B3D] rounded-md px-2 py-1 text-xs font-mono text-right text-white focus:outline-none focus:border-purple-500"
+                      />
+                      <span className="text-xs text-slate-400">hrs</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* 3. Human Profile Selection */}
@@ -347,12 +444,23 @@ export const NewRunScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* Start Button */}
-      <div className="pt-2 flex justify-end">
+      {/* Start Button & Summary */}
+      <div className="pt-2 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-mono text-slate-300 font-medium">
+            {summaryText}
+          </span>
+          {validationError && (
+            <span className="text-[11px] text-amber-400 font-medium">
+              {validationError}
+            </span>
+          )}
+        </div>
         <button
           onClick={handleStart}
-          disabled={selectedAppIds.length === 0}
-          className="flex items-center gap-2 px-7 py-3 text-sm font-semibold liquid-glass-btn-primary"
+          disabled={validationError !== null}
+          className="flex items-center gap-2 px-7 py-3 text-sm font-semibold liquid-glass-btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+          title={validationError || 'Start Grinding Run'}
         >
           <Play className="w-4 h-4 fill-white" />
           Start Grinding Run
@@ -361,4 +469,3 @@ export const NewRunScreen: React.FC = () => {
     </div>
   );
 };
-

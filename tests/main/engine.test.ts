@@ -16,6 +16,22 @@ describe('HourForge Main Engine & State Machine Integration', () => {
     await fs.mkdir(testDataDir, { recursive: true });
     store = new AtomicStore(testDataDir);
     await store.initialize();
+    await store.saveGames([
+      {
+        appId: 3513350,
+        name: 'Wuthering Waves',
+        developer: 'Kuro Games',
+        publisher: 'Kuro Games',
+        enabled: true
+      },
+      {
+        appId: 4508340,
+        name: 'NTE: Neverness to Everness',
+        developer: 'Hotta Studio',
+        publisher: 'Perfect World Games',
+        enabled: true
+      }
+    ]);
 
     backend = new FakeSteamBackend();
     await backend.start();

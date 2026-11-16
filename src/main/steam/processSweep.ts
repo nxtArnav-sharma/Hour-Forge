@@ -44,16 +44,9 @@ export function verifyIsHourForgeHelper(
 
   // 2. Executable path check: must be inside an allowed HourForge directory
   if (proc.executablePath) {
-    const isInsideAllowed = allowedDirs.some(dir =>
+    return allowedDirs.some(dir =>
       isPathInsideDirectory(proc.executablePath!, dir)
     );
-    if (isInsideAllowed) return true;
-
-    // Check if the executable filename itself is HourForge.exe or electron.exe
-    const exeName = path.basename(proc.executablePath).toLowerCase();
-    if (exeName === 'hourforge.exe') {
-      return true;
-    }
   }
 
   return false;

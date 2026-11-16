@@ -229,7 +229,7 @@ export const GamesScreen: React.FC = () => {
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="e.g. 3513350 or store.steampowered.com/app/..."
+                  placeholder="e.g. 730 or store.steampowered.com/app/..."
                   value={appIdInput}
                   onChange={e => setAppIdInput(e.target.value)}
                   className="flex-1 bg-[#0B0E14] border border-[#232B3D] focus:border-purple-500 rounded-lg px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none font-mono"

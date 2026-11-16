@@ -321,3 +321,41 @@
   5. **Settings UI**:
      - Replaced checkboxes with a Liquid Glass radio-card group featuring optimized Phoepe artwork (`Happy_Pheobe.png` for HourForge Presence, `Pheobe_Sob.png` for Invisible).
      - Fixed aspect ratios and explicit dimensions prevent layout shift.
+
+
+---
+
+## DEC-021: Run Game Selection Single Source of Truth & Main Process Validation
+- **Date**: 2026-11-16
+- **Context**: A critical bug occurred where a user having only Once Human in their library and selecting only Once Human started a run containing three tracks: Once Human (8h), App ID 3513350 (1h), and App ID 4508340 (2h).
+- **Root Cause Analysis**:
+  1. `src/renderer/screens/NewRunScreen.tsx` (lines 26-30): Hardcoded `selectedAppIds` state initialized to `[3513350, 4508340]` with hardcoded quotas `1h` and `2h`. When a user with a single library game selected Once Human (`2139460`), it was appended to `[3513350, 4508340, 2139460]`. Starting the run passed all 3 games to the engine.
+  2. `src/renderer/components/LaunchPickerCard.tsx` (lines 24-28, 68-71): Hardcoded `selectedAppIds` to `[3513350, 4508340]`, hardcoded fallback autostart action to those IDs.
+  3. `src/main/store/atomicStore.ts` (lines 133-156): Seeded `games.json` with 3513350 and 4508340 if missing, rather than starting with an empty library. Stale template and snapshot IDs were not purged on load/upgrade.
+  4. `src/main/engine/engine.ts` (lines 85-115): `startRun(options)` lacked backend and library validation; it accepted arbitrary appIds without verifying existence or enabled status in `games.json`, did not validate mode constraints, and did not terminate existing helper processes prior to startup.
+- **Decision & Fixes**:
+  1. **Strict Zod Validation (`src/shared/runSchema.ts`)**:
+     - `validateRunOptions(options, libraryGames, activeGoals)` validates every start request against the atomic store single source of truth.
+     - Validates that every `appId` exists in `games.json` and has `enabled !== false`.
+     - Rejects duplicate `appId`s.
+     - Enforces mode constraints:
+       - `SINGLE`: exactly 1 track (rejects $>1$).
+       - `MULTI`: 2 to 10 tracks.
+       - `DEDICATED`: 1 to 10 tracks, each with `targetHours > 0`.
+       - `CATCHUP`: 1 to 10 tracks, each with an active goal.
+  2. **Process Sweep Prior to Start**:
+     - `HourForgeEngine.startRun` calls `backend.killAllHelpers()` and `backend.setPlaying([])` before allocating new track state machines, guaranteeing no leftover helper processes leak between runs.
+  3. **Store Sanitization & Default Purge**:
+     - `atomicStore.initialize()` now seeds missing `games.json` with an empty array `[]` (no hardcoded games).
+     - On load/upgrade, `atomicStore` automatically purges stale `defaultTemplate` app IDs and stale `run-state.json` tracks that no longer exist or are disabled in `games.json`.
+  4. **Renderer Single Source of Truth**:
+     - `NewRunScreen` and `LaunchPickerCard` derive available game chips strictly from `games.filter(g => g.enabled !== false)`.
+     - Initial selection is empty (or populated only from enabled defaultTemplate games in library).
+     - Quotas start empty; in DEDICATED mode, users enter desired target hours.
+     - Deselecting a chip removes its quota entry.
+     - Live selection summary displays selected game count and titles (e.g. `"1 game selected: Once Human"`).
+     - Start button is disabled with inline validation notice when selection violates mode rules or library is empty.
+     - If library is empty, an empty-state card prompts the user to add a game first.
+  5. **Dashboard Mode & Track Resolution**:
+     - Dashboard header displays the friendly mode name (`"Dedicated Run"`, `"Single Game Run"`, `"Catch-Up Run"`, `"Multi-Game Run"`).
+     - Track names and cover art are resolved strictly from the library (`game.name`, `game.headerImage`), falling back to `'Game Not in Library'` if missing.

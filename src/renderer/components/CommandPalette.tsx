@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, LayoutDashboard, PlayCircle, Calendar, Target, Gamepad2, Users, History, Terminal, Settings, Pause, Square } from 'lucide-react';
+import { Search, LayoutDashboard, PlayCircle, Calendar, Target, Gamepad2, Users, History, Terminal, Settings, Pause, Square, Info } from 'lucide-react';
 import { useStore } from '../store/useStore';
+import { CREDIT_TEXT, APP_REPO_URL } from '../../shared/credit';
 
 interface CommandPaletteProps {
   isOpen: boolean;
@@ -103,6 +104,16 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
       icon: Settings,
       action: () => { navigate('settings'); onClose(); },
       shortcut: '9'
+    },
+    {
+      id: 'action-about',
+      title: `About HourForge (${CREDIT_TEXT})`,
+      category: 'Actions',
+      icon: Info,
+      action: () => {
+        window.hourforge?.system?.openExternal?.(APP_REPO_URL);
+        onClose();
+      }
     },
 
     // Actions

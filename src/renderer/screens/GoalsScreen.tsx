@@ -44,7 +44,7 @@ export const GoalsScreen: React.FC = () => {
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingGoal, setEditingGoal] = useState<CatchUpGoal | null>(null);
-  const [selectedAppId, setSelectedAppId] = useState<number>(3513350);
+  const [selectedAppId, setSelectedAppId] = useState<number>(0);
   const [targetHoursInput, setTargetHoursInput] = useState<string>('100');
   const [targetDateInput, setTargetDateInput] = useState<string>(() => {
     const d = new Date();
@@ -95,7 +95,7 @@ export const GoalsScreen: React.FC = () => {
 
   const openNewGoalModal = () => {
     setEditingGoal(null);
-    setSelectedAppId(games[0]?.appId || 3513350);
+    setSelectedAppId(games[0]?.appId || 0);
     setTargetHoursInput('100');
     const d = new Date();
     d.setDate(d.getDate() + 14);

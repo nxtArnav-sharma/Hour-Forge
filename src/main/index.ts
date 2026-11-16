@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
@@ -21,6 +21,7 @@ import { RouteManager } from './routeManager';
 import { IPC_CHANNELS } from '../shared/channels';
 import { CatchUpGoal } from '../shared/models';
 import { RunMode } from '../core/types';
+import { isAllowedExternalUrl } from '../shared/credit';
 
 // Single instance lock
 const gotTheLock = app.requestSingleInstanceLock();
@@ -668,6 +669,13 @@ function registerIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.SYSTEM_GET_LOGS, () => {
     return { engineLogs, helperLogs };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SYSTEM_OPEN_EXTERNAL_URL, async (_event, url: string) => {
+    if (typeof url !== 'string' || !isAllowedExternalUrl(url)) {
+      throw new Error(`Disallowed external URL: ${url}`);
+    }
+    await shell.openExternal(url);
   });
 }
 

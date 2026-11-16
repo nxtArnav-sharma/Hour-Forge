@@ -1,8 +1,18 @@
 {
   "name": "hourforge",
-  "version": "0.1.1",
+  "version": "0.1.2",
+  "license": "Apache-2.0",
   "private": true,
   "description": "Autonomous Steam playtime keeper and humanized scheduler",
+  "author": "Arnav Sharma",
+  "homepage": "https://github.com/nxtArnav-sharma/Hour-Forge",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nxtArnav-sharma/Hour-Forge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nxtArnav-sharma/Hour-Forge/issues"
+  },
   "main": "dist/main/index.js",
   "scripts": {
     "build": "npm run build:main && npm run build:preload && npm run build:renderer",
@@ -17,6 +27,7 @@
   "build": {
     "appId": "com.hourforge.app",
     "productName": "HourForge",
+    "copyright": "Copyright © 2026 Arnav Sharma",
     "directories": {
       "output": "release"
     },

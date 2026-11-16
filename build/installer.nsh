@@ -17,13 +17,13 @@ FunctionEnd
 
 !macro customWelcomePage
   !define MUI_WELCOMEPAGE_TITLE "Welcome to HourForge Setup"
-  !define MUI_WELCOMEPAGE_TEXT "HourForge is an autonomous Windows system tray supervisor and humanized Steam playtime keeper.$\r$\n$\r$\nNote: Because this build is unsigned, Windows SmartScreen may show an 'Unknown Publisher' warning. Click 'More info' and 'Run anyway' to proceed.$\r$\n$\r$\nClick Next to continue."
+  !define MUI_WELCOMEPAGE_TEXT "HourForge is an autonomous Windows system tray supervisor and humanized Steam playtime keeper.$\r$\n$\r$\nSculpted to Life by Arnav Sharma, Discord:- Lesserkeyofsolomon.$\r$\n$\r$\nNote: Because this build is unsigned, Windows SmartScreen may show an 'Unknown Publisher' warning. Click 'More info' and 'Run anyway' to proceed.$\r$\n$\r$\nClick Next to continue."
   !insertmacro MUI_PAGE_WELCOME
 !macroend
 
 !macro customFinishPage
   !define MUI_FINISHPAGE_TITLE "HourForge Setup Complete"
-  !define MUI_FINISHPAGE_TEXT "HourForge has been installed on your computer.$\r$\n$\r$\nThe application will run in your Windows system tray, silently managing your playtime schedules according to your configured profiles."
+  !define MUI_FINISHPAGE_TEXT "HourForge has been installed on your computer.$\r$\n$\r$\nSculpted to Life by Arnav Sharma, Discord:- Lesserkeyofsolomon.$\r$\n$\r$\nThe application will run in your Windows system tray, silently managing your playtime schedules according to your configured profiles."
 
   !define MUI_FINISHPAGE_RUN
   !define MUI_FINISHPAGE_RUN_TEXT "Launch HourForge"
@@ -45,7 +45,7 @@ FunctionEnd
 
 !macro customUnWelcomePage
   !define MUI_WELCOMEPAGE_TITLE "Uninstall HourForge"
-  !define MUI_WELCOMEPAGE_TEXT "This wizard will uninstall HourForge from your computer.$\r$\n$\r$\nYour custom profiles, tracked games, and goal history can be preserved if you choose to keep your user data.$\r$\n$\r$\nClick Next to continue."
+  !define MUI_WELCOMEPAGE_TEXT "This wizard will uninstall HourForge from your computer.$\r$\n$\r$\nHourForge — Sculpted to Life by Arnav Sharma.$\r$\n$\r$\nYour custom profiles, tracked games, and goal history can be preserved if you choose to keep your user data.$\r$\n$\r$\nClick Next to continue."
   !insertmacro MUI_UNPAGE_WELCOME
 !macroend
 

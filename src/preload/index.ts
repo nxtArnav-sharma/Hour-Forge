@@ -84,6 +84,7 @@ export interface HourForgeApi {
     close: () => void;
     getLogs: () => Promise<{ engineLogs: string[]; helperLogs: string[] }>;
     onLogLine: (callback: (category: 'engine' | 'helper', line: string) => void) => () => void;
+    openExternal: (url: string) => Promise<void>;
   };
 }
 
@@ -181,7 +182,8 @@ const api: HourForgeApi = {
         callback(payload.category, payload.line);
       ipcRenderer.on(IPC_CHANNELS.EVENT_LOG_LINE, handler);
       return () => ipcRenderer.removeListener(IPC_CHANNELS.EVENT_LOG_LINE, handler);
-    }
+    },
+    openExternal: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_OPEN_EXTERNAL_URL, url)
   }
 };
 

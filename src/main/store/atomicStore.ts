@@ -130,29 +130,50 @@ export class AtomicStore {
     // 3. Initialize default games if missing
     const gamesPath = this.getFilePath('games.json');
     if (!existsSync(gamesPath)) {
-      const defaultGames: GameEntry[] = [
-        {
-          appId: 3513350,
-          name: 'Wuthering Waves',
-          developer: 'Kuro Games',
-          publisher: 'Kuro Games',
-          headerImage:
-            'https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/3513350/header.jpg',
-          processNames: ['Wuthering Waves.exe', 'Client-Win64-Shipping.exe'],
-          defaultHours: 1
-        },
-        {
-          appId: 4508340,
-          name: 'NTE: Neverness to Everness',
-          developer: 'Hotta Studio',
-          publisher: 'Perfect World Games',
-          headerImage:
-            'https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/4508340/header.jpg',
-          processNames: ['NTE.exe', 'NevernessToEverness.exe'],
-          defaultHours: 2
+      await this.saveGames([]);
+    }
+
+    // 4. Sanitize default template & run snapshot (drop stale IDs not in enabled library games)
+    const currentGames = await this.getGames();
+    const validAppIds = new Set(
+      currentGames.filter(g => g.enabled !== false).map(g => g.appId)
+    );
+
+    const currentSettings = await this.getSettings();
+    if (currentSettings && currentSettings.defaultTemplate) {
+      const filteredAppIds = currentSettings.defaultTemplate.appIds.filter(id => validAppIds.has(id));
+      if (filteredAppIds.length === 0) {
+        delete currentSettings.defaultTemplate;
+        await this.saveSettings(currentSettings);
+      } else if (filteredAppIds.length !== currentSettings.defaultTemplate.appIds.length) {
+        currentSettings.defaultTemplate.appIds = filteredAppIds;
+        if (currentSettings.defaultTemplate.targets) {
+          for (const k of Object.keys(currentSettings.defaultTemplate.targets)) {
+            if (!validAppIds.has(Number(k))) {
+              delete currentSettings.defaultTemplate.targets[Number(k)];
+            }
+          }
         }
-      ];
-      await this.saveGames(defaultGames);
+        await this.saveSettings(currentSettings);
+      }
+    }
+
+    const snapshotPath = this.getFilePath('run-state.json');
+    if (existsSync(snapshotPath)) {
+      try {
+        const snapshot = await this.readJsonFile<RunStateSnapshot>('run-state.json');
+        if (snapshot && Array.isArray(snapshot.tracks)) {
+          const validTracks = snapshot.tracks.filter(t => validAppIds.has(t.appId));
+          if (validTracks.length === 0) {
+            await this.clearRunSnapshot();
+          } else if (validTracks.length !== snapshot.tracks.length) {
+            snapshot.tracks = validTracks;
+            await this.saveRunSnapshot(snapshot);
+          }
+        }
+      } catch {
+        await this.clearRunSnapshot();
+      }
     }
 
     // 4. Initialize profiles if missing

@@ -13,6 +13,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { useStore, NavRoute } from '../store/useStore';
+import { CREDIT_TEXT, APP_REPO_URL } from '../../shared/credit';
 
 interface NavItem {
   id: NavRoute;
@@ -83,19 +84,31 @@ export const NavRail: React.FC = () => {
         </nav>
       </div>
 
-      {/* Collapse toggle button */}
-      <div className="p-3 border-t border-white/[0.08] flex justify-end">
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition-colors"
-          title={collapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
-        >
-          {collapsed ? (
-            <ChevronRight className="w-4 h-4" />
-          ) : (
-            <ChevronLeft className="w-4 h-4" />
-          )}
-        </button>
+      {/* Sidebar Footer with Author Credit & Collapse toggle button */}
+      <div className="p-3 border-t border-white/[0.08] flex flex-col gap-2">
+        {!collapsed && (
+          <div
+            onClick={() => window.hourforge?.system?.openExternal?.(APP_REPO_URL)}
+            className="cursor-pointer group select-none text-[10px] text-slate-500 hover:text-slate-300 transition-colors leading-tight"
+            title={CREDIT_TEXT}
+          >
+            <span className="block truncate font-medium text-slate-400 group-hover:text-purple-300">By Arnav Sharma</span>
+            <span className="block truncate text-[9px] text-slate-600 group-hover:text-slate-400 font-mono">Discord: Lesserkeyofsolomon</span>
+          </div>
+        )}
+        <div className="flex justify-end">
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition-colors"
+            title={collapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+          >
+            {collapsed ? (
+              <ChevronRight className="w-4 h-4" />
+            ) : (
+              <ChevronLeft className="w-4 h-4" />
+            )}
+          </button>
+        </div>
       </div>
     </aside>
   );

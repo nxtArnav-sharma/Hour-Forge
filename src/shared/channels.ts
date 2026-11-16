@@ -33,6 +33,7 @@ export const IPC_CHANNELS = {
   SYSTEM_WINDOW_CLOSE: 'system:window-close',
   SYSTEM_GET_LOGS: 'system:get-logs',
   SYSTEM_EXPORT_DIAGNOSTICS: 'system:export-diagnostics',
+  SYSTEM_OPEN_EXTERNAL_URL: 'system:open-external-url',
   APP_CONSUME_PENDING_ROUTE: 'app:consumePendingRoute',
 
   // Goals (M11 Catch-Up Goal)
