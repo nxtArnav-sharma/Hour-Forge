@@ -1,6 +1,11 @@
 import { PRNG } from './rng';
-import { Block, HumanProfile } from './types';
-import { sampleSessionDurationSec, sampleRestDurationSec, sampleBootJitterSec } from './sampler';
+import { Block, HumanProfile, MAX_BREAK_SECONDS, CustomPattern, BlockCutReason } from './types';
+import {
+  sampleSessionDurationSec,
+  sampleRestDurationSec,
+  sampleBootJitterSec,
+  sampleCustomStepDurationSec
+} from './sampler';
 import { computeActiveWindow, getNextDayBoundaryMs, isLocalWeekend } from './calendar';
 
 let blockIdCounter = 0;
@@ -16,6 +21,9 @@ export interface PlanOptions {
   startTimeUtc: number; // epoch ms (T0 or current block start)
   isFirstBlockOfRun?: boolean;
   dailyQuotaSeconds?: number; // Target daily quota for CATCHUP mode (never exceeds daily cap)
+  customPattern?: CustomPattern;
+  startStepIndex?: number;
+  initialStepElapsedSec?: number;
 }
 
 /**
@@ -39,6 +47,195 @@ export function planTrackBlocks(
   let todayCredited = options.todayCreditedSeconds ?? 0;
   let nextDayBoundaryMs = getNextDayBoundaryMs(currentCursorMs);
   const blocks: Block[] = [];
+
+  // Custom Pattern Planning Mode
+  if (options.customPattern) {
+    const pattern = options.customPattern;
+    const steps = pattern.steps;
+    let stepIdx = options.startStepIndex ?? 0;
+    let firstStep = true;
+    const customDailyCapSec = pattern.dailyLimitHours ? pattern.dailyLimitHours * 3600 : undefined;
+
+    if (isFirstBlockOfRun) {
+      const jitterSec = rng.nextInt(45, 420);
+      if (jitterSec > 0) {
+        blocks.push({
+          id: nextBlockId(),
+          type: 'rest',
+          reason: 'boot_jitter',
+          startUtc: currentCursorMs,
+          endUtc: currentCursorMs + jitterSec * 1000,
+          durationSec: jitterSec,
+          isExact: true
+        });
+        currentCursorMs += jitterSec * 1000;
+      }
+    }
+
+    while (blocks.length < blockCount) {
+      if (currentCursorMs >= nextDayBoundaryMs) {
+        todayCredited = 0;
+        nextDayBoundaryMs = getNextDayBoundaryMs(currentCursorMs);
+      }
+
+      // Check daily cap
+      if (customDailyCapSec && todayCredited >= customDailyCapSec) {
+        const nextDayStartMs = getNextDayBoundaryMs(currentCursorMs);
+        const restDurationSec = Math.max(60, Math.round((nextDayStartMs - currentCursorMs) / 1000));
+        blocks.push({
+          id: nextBlockId(),
+          type: 'rest',
+          reason: 'daily_cap',
+          startUtc: currentCursorMs,
+          endUtc: nextDayStartMs,
+          durationSec: restDurationSec
+        });
+        currentCursorMs = nextDayStartMs;
+        todayCredited = 0;
+        continue;
+      }
+
+      // Check active window
+      let activeWin = null;
+      if (pattern.activeWindow) {
+        activeWin = computeActiveWindow(currentCursorMs, { activeWindow: pattern.activeWindow } as any, rng);
+      }
+      if (activeWin) {
+        if (currentCursorMs < activeWin.windowStartMs) {
+          const restDurationSec = Math.max(60, Math.round((activeWin.windowStartMs - currentCursorMs) / 1000));
+          blocks.push({
+            id: nextBlockId(),
+            type: 'rest',
+            reason: 'active_window',
+            startUtc: currentCursorMs,
+            endUtc: activeWin.windowStartMs,
+            durationSec: restDurationSec
+          });
+          currentCursorMs = activeWin.windowStartMs;
+          continue;
+        }
+        if (currentCursorMs >= activeWin.windowEndMs) {
+          const nextDayWin = computeActiveWindow(activeWin.windowEndMs + 1000, { activeWindow: pattern.activeWindow } as any, rng);
+          const nextStart = nextDayWin ? nextDayWin.windowStartMs : activeWin.windowEndMs + 8 * 3600 * 1000;
+          const restDurationSec = Math.max(60, Math.round((nextStart - currentCursorMs) / 1000));
+          blocks.push({
+            id: nextBlockId(),
+            type: 'rest',
+            reason: 'active_window',
+            startUtc: currentCursorMs,
+            endUtc: nextStart,
+            durationSec: restDurationSec
+          });
+          currentCursorMs = nextStart;
+          continue;
+        }
+      }
+
+      const step = steps[stepIdx]!;
+      let durationSec = sampleCustomStepDurationSec(rng, step);
+      if (firstStep && options.initialStepElapsedSec && options.initialStepElapsedSec > 0) {
+        durationSec = Math.max(1, durationSec - options.initialStepElapsedSec);
+      }
+      firstStep = false;
+
+      if (step.type === 'play') {
+        let cutReason: BlockCutReason | undefined;
+        if (customDailyCapSec && todayCredited + durationSec > customDailyCapSec) {
+          durationSec = customDailyCapSec - todayCredited;
+          cutReason = 'daily_cap';
+        }
+        if (activeWin && currentCursorMs + durationSec * 1000 > activeWin.windowEndMs) {
+          durationSec = Math.floor((activeWin.windowEndMs - currentCursorMs) / 1000);
+          cutReason = 'active_window_boundary';
+        }
+
+        if ((cutReason === 'active_window_boundary' || cutReason === 'daily_cap') && durationSec < 600) {
+          let restEnd: number;
+          let reason: 'active_window' | 'daily_cap';
+          if (cutReason === 'daily_cap') {
+            const nextDayStartMs = getNextDayBoundaryMs(currentCursorMs);
+            restEnd = nextDayStartMs;
+            reason = 'daily_cap';
+            todayCredited = 0;
+          } else {
+            restEnd = activeWin ? activeWin.windowEndMs : currentCursorMs + Math.max(60, durationSec) * 1000;
+            reason = 'active_window';
+          }
+          const restDuration = Math.max(60, Math.round((restEnd - currentCursorMs) / 1000));
+          blocks.push({
+            id: nextBlockId(),
+            type: 'rest',
+            reason,
+            startUtc: currentCursorMs,
+            endUtc: restEnd,
+            durationSec: restDuration
+          });
+          currentCursorMs = restEnd;
+          stepIdx = (stepIdx + 1) % steps.length;
+          continue;
+        }
+
+        if (durationSec <= 0) {
+          stepIdx = (stepIdx + 1) % steps.length;
+          continue;
+        }
+
+        const playStart = currentCursorMs;
+        const playEnd = playStart + durationSec * 1000;
+        blocks.push({
+          id: nextBlockId(),
+          type: 'play',
+          reason: 'sample',
+          cutReason,
+          startUtc: playStart,
+          endUtc: playEnd,
+          durationSec,
+          isExact: step.minMin === step.maxMin,
+          stepIndex: stepIdx,
+          stepMinSec: step.minMin * 60,
+          stepMaxSec: step.maxMin * 60
+        });
+
+        currentCursorMs = playEnd;
+        todayCredited += durationSec;
+        stepIdx = (stepIdx + 1) % steps.length;
+
+        if (cutReason === 'daily_cap') {
+          const nextDayStartMs = getNextDayBoundaryMs(currentCursorMs);
+          const restDuration = Math.max(60, Math.round((nextDayStartMs - currentCursorMs) / 1000));
+          blocks.push({
+            id: nextBlockId(),
+            type: 'rest',
+            reason: 'daily_cap',
+            startUtc: currentCursorMs,
+            endUtc: nextDayStartMs,
+            durationSec: restDuration
+          });
+          currentCursorMs = nextDayStartMs;
+          todayCredited = 0;
+        }
+      } else {
+        const restStart = currentCursorMs;
+        const restEnd = restStart + durationSec * 1000;
+        blocks.push({
+          id: nextBlockId(),
+          type: 'rest',
+          reason: 'sample',
+          startUtc: restStart,
+          endUtc: restEnd,
+          durationSec,
+          isExact: step.minMin === step.maxMin,
+          stepIndex: stepIdx,
+          stepMinSec: step.minMin * 60,
+          stepMaxSec: step.maxMin * 60
+        });
+        currentCursorMs = restEnd;
+        stepIdx = (stepIdx + 1) % steps.length;
+      }
+    }
+
+    return blocks;
+  }
 
   // Boot jitter for first block of run
   if (isFirstBlockOfRun) {
@@ -254,7 +451,8 @@ export function planTrackBlocks(
     }
 
     // --- Sample Rest Block ---
-    const restSec = sampleRestDurationSec(rng, profile, precedingSessionSec, isWeekend);
+    const rawRest = sampleRestDurationSec(rng, profile, precedingSessionSec, isWeekend);
+    const restSec = Math.min(MAX_BREAK_SECONDS, rawRest);
     const restStartMs = currentCursorMs;
     const restEndMs = restStartMs + restSec * 1000;
 
@@ -283,7 +481,12 @@ export function mergeConsecutiveRests(blocks: Block[]): Block[] {
     const last = merged[merged.length - 1];
     if (last && last.type === 'rest' && block.type === 'rest') {
       last.endUtc = block.endUtc;
-      last.durationSec = Math.round((last.endUtc - last.startUtc) / 1000);
+      let dur = Math.round((last.endUtc - last.startUtc) / 1000);
+      if (last.reason === 'sample' && block.reason === 'sample') {
+        dur = Math.min(MAX_BREAK_SECONDS, dur);
+        last.endUtc = last.startUtc + dur * 1000;
+      }
+      last.durationSec = dur;
       if (last.reason !== 'daily_cap') {
         last.reason = block.reason || last.reason;
       }
@@ -314,7 +517,7 @@ export function avoidBoundaryCollisions(
       const prevTrack = result[prevIdx]!;
 
       for (const currentBlock of currentTrack) {
-        if (currentBlock.locked) continue;
+        if (currentBlock.locked || currentBlock.isExact) continue;
 
         for (const prevBlock of prevTrack) {
           // Check start boundary collision within 20s
@@ -330,7 +533,15 @@ export function avoidBoundaryCollisions(
           if (endDelta > 0 && endDelta < 20_000) {
             const shiftMs = rng.nextInt(20, 90) * 1000;
             currentBlock.endUtc += shiftMs;
-            currentBlock.durationSec = Math.round((currentBlock.endUtc - currentBlock.startUtc) / 1000);
+            let dur = Math.round((currentBlock.endUtc - currentBlock.startUtc) / 1000);
+            if (currentBlock.stepMinSec !== undefined && currentBlock.stepMaxSec !== undefined) {
+              dur = Math.max(currentBlock.stepMinSec, Math.min(currentBlock.stepMaxSec, dur));
+            }
+            if (currentBlock.type === 'rest') {
+              dur = Math.min(MAX_BREAK_SECONDS, dur);
+            }
+            currentBlock.durationSec = dur;
+            currentBlock.endUtc = currentBlock.startUtc + dur * 1000;
           }
         }
       }

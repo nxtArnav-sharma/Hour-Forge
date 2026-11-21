@@ -6,7 +6,7 @@
 
 *Sculpted to Life by Arnav Sharma, Discord:- Lesserkeyofsolomon*
 
-[![Release](https://img.shields.io/badge/release-v0.1.2-purple.svg)](https://github.com/nxtArnav-sharma/Hour-Forge/releases)
+[![Release](https://img.shields.io/badge/release-v0.1.3-purple.svg)](https://github.com/nxtArnav-sharma/Hour-Forge/releases)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue.svg)](https://github.com/nxtArnav-sharma/Hour-Forge)
 [![TypeScript](https://img.shields.io/badge/language-TypeScript-3178C6.svg)](https://www.typescriptlang.org/)
@@ -54,7 +54,7 @@ HourForge integrates directly with your already-running official Steam desktop c
 +-------------------------------+     +---------------+---------------+     +-------------------------------+
 |      Liquid Glass UI          |     |    Main Process (Supervisor)  |     |      Atomic Store (Data)      |
 |  React 18 + Tailwind + Lucide | <-> | - State Machine & Routing     | <-> | - atomicStore.ts              |
-|  Acrylic / DWM Frameless      |     | - Zod Run Validation          |     | - Backup & Restore (Schema v1)|
+|  Acrylic / DWM Frameless      |     | - Zod Run Validation          |     | - Backup & Restore (Schema v2)|
 +-------------------------------+     | - Discord RPC Service         |     +-------------------------------+
                                       +---------------+---------------+
                                                       |
@@ -67,11 +67,6 @@ HourForge integrates directly with your already-running official Steam desktop c
                                                       |
                                       +---------------+---------------+
                                       |   SteamClientBackend Manager  |
-                                      +---------------+---------------+
-                                                      |
-                                      +---------------+---------------+
-                                      |   steamHelper.js (Process)    |
-                                      | - Native Steamworks Client IPC|
                                       +---------------+---------------+
                                                       |
                                                       v
@@ -105,6 +100,7 @@ HourForge integrates directly with your already-running official Steam desktop c
 | **`MULTI`** | Alternating Rotation | 2 to 10 | Rotates across multiple games across successive sessions, ensuring diverse library activity. |
 | **`DEDICATED`** | Target Quota Accumulator | 1 to 10 | Farms an exact number of hours per game (e.g. 10.0h) and terminates automatically when finished. |
 | **`CATCHUP`** | Dynamic Deadline Pacing | 1 to 10 | Calculates dynamic daily quotas to reach milestones before deadlines, adjusting for PC-off time. |
+| **`CUSTOM`** | Custom Step Patterns | 1 to 10 | Executes arbitrary sequences of play and rest steps (exact or variable) with cyclic repeats, optional daily caps, and active windows. |
 
 ---
 

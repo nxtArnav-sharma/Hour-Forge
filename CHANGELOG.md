@@ -5,6 +5,39 @@ All notable changes to HourForge are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-11-21
+
+### Added
+- **Custom Operating Mode (`CUSTOM`)**:
+  - Full support for arbitrary sequences of play and rest steps (2 to 12 steps per pattern).
+  - Exact durations (e.g. 60m play / 5m rest / 120m play / 60m rest) or bounded variable ranges sampled via log-normal distribution.
+  - Simple view (single play/rest configuration) and Advanced view (ordered step list with reordering, step additions, and deletions).
+  - Cyclic pattern repeats, optional daily limits (1–24 hours), and wake/sleep active windows with edge jitter.
+  - Live average play-per-day indicator with high-playtime caution (16h+ warning banner).
+  - Multi-track independent offset handling with boot jitter (45–420s) preventing synchronized boundary switches.
+  - Interruption and sleep recovery advancing tracks to the next rest step on gaps >= 30 minutes.
+  - Backup Schema v2 support with backward-compatible import/export of saved custom patterns (up to 20 patterns).
+- **Launch Picker in System Tray**:
+  - Direct *"Launch Picker..."* entry in the system tray menu opening the card on demand in manual mode (no 60s countdown, focused immediately).
+  - Multi-monitor positioning nearest cursor clamped to the display's usable work area.
+  - Checkbox toggle *"Show Launch Picker at startup"* in tray and Settings screen, persisting preference and allowing silent background startup when unticked.
+  - Global keyboard shortcut `Ctrl+Shift+L` and Command Palette action to open Launch Picker manually.
+  - Warning banner when opening Launch Picker while another run is active.
+- **Single Source of Truth for Version & Author Credit**:
+  - Dynamic window title-bar version label sourced from `app.getVersion()` via IPC/preload bridge.
+  - Sidebar footer and About screen author credit locked to canonical constant `CREDIT_TEXT` (*"Sculpted to Life by Arnav Sharma, Discord:- Lesserkeyofsolomon"*).
+
+### Changed
+- **Universal 60-Minute Rest Ceiling**:
+  - Hard 60-minute ceiling (`MAX_BREAK_SECONDS = 3600`) applied across all sampler presets, preventing runaway multi-hour breaks.
+  - Backup importer automatically clamps legacy or third-party rest steps exceeding 60 minutes.
+
+### Fixed
+- **Process Termination Notice**:
+  - Removed outdated legacy ArchiSteamFarm references from tray quit confirmation dialog and documentation.
+
+---
+
 ## [0.1.2] - 2026-11-16
 
 ### Added

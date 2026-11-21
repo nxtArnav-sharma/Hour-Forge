@@ -115,6 +115,17 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
         onClose();
       }
     },
+    {
+      id: 'action-open-launch-picker',
+      title: 'Open Launch Picker',
+      category: 'Actions',
+      icon: PlayCircle,
+      action: () => {
+        window.hourforge?.system?.openLaunchPicker?.();
+        onClose();
+      },
+      shortcut: 'Ctrl+Shift+L'
+    },
 
     // Actions
     ...(isRunning ? [

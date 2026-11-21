@@ -1,3 +1,5 @@
+export const MAX_BREAK_SECONDS = 3600;
+
 export type BlockType = 'play' | 'rest';
 
 export type BlockReason = 'sample' | 'active_window' | 'daily_cap' | 'boot_jitter';
@@ -13,6 +15,28 @@ export interface Block {
   reason?: BlockReason;
   cutReason?: BlockCutReason;
   locked?: boolean;
+  isExact?: boolean;
+  stepIndex?: number;
+  stepMinSec?: number;
+  stepMaxSec?: number;
+}
+
+export interface CustomStep {
+  type: 'play' | 'rest';
+  minMin: number;
+  maxMin: number;
+}
+
+export interface CustomPattern {
+  id: string;
+  name: string;
+  steps: CustomStep[];
+  dailyLimitHours?: number;
+  activeWindow?: {
+    start: string;
+    end: string;
+    edgeJitterMin: number;
+  };
 }
 
 export interface HumanProfile {
@@ -57,7 +81,7 @@ export type TrackOverlay =
   | 'MIRRORING'
   | 'USER_PAUSED';
 
-export type RunMode = 'SINGLE' | 'MULTI' | 'DEDICATED' | 'CATCHUP';
+export type RunMode = 'SINGLE' | 'MULTI' | 'DEDICATED' | 'CATCHUP' | 'CUSTOM';
 
 export interface TrackConfig {
   appId: number;

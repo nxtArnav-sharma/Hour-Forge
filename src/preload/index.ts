@@ -8,6 +8,7 @@ import { NavRoute } from '../shared/routes';
 export interface HourForgeApi {
   app: {
     consumePendingRoute: () => Promise<NavRoute | null>;
+    getVersion: () => Promise<string>;
     onNavigate: (callback: (route: NavRoute) => void) => () => void;
   };
   engine: {
@@ -16,6 +17,7 @@ export interface HourForgeApi {
       tracks: Array<{ appId: number; targetHours?: number; dailyQuotaHours?: number }>;
       profileId: string;
       delayMs?: number;
+      customPattern?: import('../core/types').CustomPattern;
     }) => Promise<void>;
     stopRun: () => Promise<void>;
     pauseAll: () => Promise<void>;
@@ -33,7 +35,11 @@ export interface HourForgeApi {
     removeGame: (appId: number) => Promise<void>;
     getProfiles: () => Promise<HumanProfile[]>;
     saveProfile: (profile: HumanProfile) => Promise<void>;
+    getCustomPatterns: () => Promise<import('../core/types').CustomPattern[]>;
+    saveCustomPattern: (pattern: import('../core/types').CustomPattern) => Promise<void>;
+    deleteCustomPattern: (id: string) => Promise<void>;
     getHistory: () => Promise<SessionLogEntry[]>;
+    onSettingsUpdated: (callback: (settings: AppSettings) => void) => () => void;
   };
   steam: {
     resolveApp: (appIdOrUrl: string) => Promise<any>;
@@ -85,12 +91,15 @@ export interface HourForgeApi {
     getLogs: () => Promise<{ engineLogs: string[]; helperLogs: string[] }>;
     onLogLine: (callback: (category: 'engine' | 'helper', line: string) => void) => () => void;
     openExternal: (url: string) => Promise<void>;
+    openLaunchPicker: () => Promise<void>;
+    onLaunchPickerMode: (callback: (mode: 'auto' | 'manual') => void) => () => void;
   };
 }
 
 const api: HourForgeApi = {
   app: {
     consumePendingRoute: () => ipcRenderer.invoke(IPC_CHANNELS.APP_CONSUME_PENDING_ROUTE),
+    getVersion: () => ipcRenderer.invoke(IPC_CHANNELS.APP_GET_VERSION),
     onNavigate: callback => {
       const handler = (_event: any, route: NavRoute) => callback(route);
       ipcRenderer.on(IPC_CHANNELS.EVENT_NAVIGATE, handler);
@@ -125,7 +134,15 @@ const api: HourForgeApi = {
     removeGame: id => ipcRenderer.invoke(IPC_CHANNELS.STORE_REMOVE_GAME, id),
     getProfiles: () => ipcRenderer.invoke(IPC_CHANNELS.STORE_GET_PROFILES),
     saveProfile: p => ipcRenderer.invoke(IPC_CHANNELS.STORE_SAVE_PROFILE, p),
-    getHistory: () => ipcRenderer.invoke(IPC_CHANNELS.STORE_GET_HISTORY)
+    getCustomPatterns: () => ipcRenderer.invoke(IPC_CHANNELS.STORE_GET_CUSTOM_PATTERNS),
+    saveCustomPattern: p => ipcRenderer.invoke(IPC_CHANNELS.STORE_SAVE_CUSTOM_PATTERN, p),
+    deleteCustomPattern: id => ipcRenderer.invoke(IPC_CHANNELS.STORE_DELETE_CUSTOM_PATTERN, id),
+    getHistory: () => ipcRenderer.invoke(IPC_CHANNELS.STORE_GET_HISTORY),
+    onSettingsUpdated: callback => {
+      const handler = (_event: any, settings: AppSettings) => callback(settings);
+      ipcRenderer.on(IPC_CHANNELS.EVENT_SETTINGS_UPDATED, handler);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.EVENT_SETTINGS_UPDATED, handler);
+    }
   },
   steam: {
     resolveApp: input => ipcRenderer.invoke(IPC_CHANNELS.STEAM_RESOLVE_APP, input),
@@ -183,7 +200,13 @@ const api: HourForgeApi = {
       ipcRenderer.on(IPC_CHANNELS.EVENT_LOG_LINE, handler);
       return () => ipcRenderer.removeListener(IPC_CHANNELS.EVENT_LOG_LINE, handler);
     },
-    openExternal: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_OPEN_EXTERNAL_URL, url)
+    openExternal: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_OPEN_EXTERNAL_URL, url),
+    openLaunchPicker: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_OPEN_LAUNCH_PICKER),
+    onLaunchPickerMode: callback => {
+      const handler = (_event: any, mode: 'auto' | 'manual') => callback(mode);
+      ipcRenderer.on('launch-picker-mode', handler);
+      return () => ipcRenderer.removeListener('launch-picker-mode', handler);
+    }
   }
 };
 

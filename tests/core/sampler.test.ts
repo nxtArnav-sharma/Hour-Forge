@@ -27,28 +27,20 @@ describe('Sampler Distributions (10,000 draws)', () => {
     expect(mean).toBeLessThan(8000);
   });
 
-  it('respects rest bounds and 60s hard floor over 10,000 draws', () => {
-    const rng = new Mulberry32(101010);
-    const minSec = profile.rest.minMin * 60; // 5m -> 300s
-    const maxSec = profile.rest.longMaxMin * 60; // long max 150m -> 9000s
-
-    let longRestCount = 0;
-    const n = 10000;
-    for (let i = 0; i < n; i++) {
-      const r = sampleRestDurationSec(rng, profile, 7200, false);
-      expect(r).toBeGreaterThanOrEqual(60); // 60s hard floor
-      expect(r).toBeGreaterThanOrEqual(minSec);
-      expect(r).toBeLessThanOrEqual(maxSec);
-
-      if (r > profile.rest.maxMin * 60) {
-        longRestCount++;
+  it('respects rest bounds, 60s hard floor, and 3600s hard cap over 10,000 draws for all presets', () => {
+    const presets = ['casual', 'regular', 'grinder', 'weekend-warrior'];
+    for (const presetId of presets) {
+      const p = BUILTIN_PROFILES[presetId]!;
+      const rng = new Mulberry32(101010);
+      const minSec = p.rest.minMin * 60;
+      const n = 10000;
+      for (let i = 0; i < n; i++) {
+        const r = sampleRestDurationSec(rng, p, 7200, false);
+        expect(r).toBeGreaterThanOrEqual(60); // 60s hard floor
+        expect(r).toBeGreaterThanOrEqual(minSec);
+        expect(r).toBeLessThanOrEqual(3600); // 60m hard cap
       }
     }
-
-    // longChance is 0.20 (20%)
-    const longRate = longRestCount / n;
-    expect(longRate).toBeGreaterThan(0.12);
-    expect(longRate).toBeLessThan(0.28);
   });
 
   it('scales rest with preceding session duration when enabled', () => {

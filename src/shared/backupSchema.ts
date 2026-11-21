@@ -1,14 +1,15 @@
 import { z } from 'zod';
 
-export const BACKUP_SCHEMA_VERSION = 1;
+export const BACKUP_SCHEMA_VERSION = 2;
 export const MAX_BACKUP_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB file size limit
 
 export const DefaultTemplateBackupSchema = z
   .object({
-    mode: z.enum(['DEDICATED', 'SINGLE', 'MULTI', 'CATCHUP']),
+    mode: z.enum(['DEDICATED', 'SINGLE', 'MULTI', 'CATCHUP', 'CUSTOM']),
     appIds: z.array(z.number().int().positive()).max(50),
     profileId: z.string().min(1).max(50),
-    targets: z.record(z.string(), z.number().positive()).optional()
+    targets: z.record(z.string(), z.number().positive()).optional(),
+    customPatternId: z.string().max(50).optional()
   })
   .strict();
 
@@ -20,6 +21,7 @@ export const AppSettingsBackupSchema = z
     theme: z.enum(['dark', 'light', 'system']),
     onlineStatus: z.number().int().min(1).max(7),
     launchPickerCountdownSec: z.number().int().min(5).max(300),
+    showLaunchPickerAtStartup: z.boolean().optional(),
     defaultTemplate: DefaultTemplateBackupSchema.optional(),
     notifyOnBlocked: z.boolean(),
     notifyOnFinish: z.boolean(),
@@ -70,7 +72,14 @@ const RestConfigSchema = z
   })
   .refine(r => r.longMinMin <= r.longMaxMin, {
     message: 'rest longMinMin must be <= longMaxMin'
-  });
+  })
+  .transform(r => ({
+    minMin: Math.min(60, r.minMin),
+    maxMin: Math.min(60, r.maxMin),
+    longChance: r.longChance,
+    longMinMin: Math.min(60, r.longMinMin),
+    longMaxMin: Math.min(60, r.longMaxMin)
+  }));
 
 const BootJitterSchema = z
   .object({
@@ -132,6 +141,45 @@ export const SessionLogEntryBackupSchema = z
   })
   .strict();
 
+export const CustomStepBackupSchema = z
+  .object({
+    type: z.enum(['play', 'rest']),
+    minMin: z.number().int().min(1).max(1440),
+    maxMin: z.number().int().min(1).max(1440)
+  })
+  .strict()
+  .refine(s => s.minMin <= s.maxMin, {
+    message: 'minMin must be <= maxMin'
+  })
+  .transform(s => ({
+    type: s.type,
+    minMin: s.type === 'rest' ? Math.min(60, s.minMin) : s.minMin,
+    maxMin: s.type === 'rest' ? Math.min(60, s.maxMin) : s.maxMin
+  }));
+
+export const CustomPatternBackupSchema = z
+  .object({
+    id: z.string().min(1).max(50),
+    name: z.string().trim().min(1).max(40),
+    steps: z.array(CustomStepBackupSchema).min(2).max(12).refine(steps => {
+      const hasPlay = steps.some(s => s.type === 'play');
+      const hasRest = steps.some(s => s.type === 'rest');
+      return hasPlay && hasRest;
+    }, {
+      message: 'Pattern must contain at least one play step and one rest step.'
+    }),
+    dailyLimitHours: z.number().min(1).max(24).optional(),
+    activeWindow: z
+      .object({
+        start: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, 'Invalid activeWindow start time (HH:mm)'),
+        end: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, 'Invalid activeWindow end time (HH:mm)'),
+        edgeJitterMin: z.number().int().min(0).max(15)
+      })
+      .strict()
+      .optional()
+  })
+  .strict();
+
 export const BackupFileSchema = z
   .object({
     schemaVersion: z.number().int().positive(),
@@ -141,6 +189,7 @@ export const BackupFileSchema = z
     games: z.array(GameEntryBackupSchema).max(500),
     profiles: z.array(HumanProfileBackupSchema).max(50),
     goals: z.array(CatchUpGoalBackupSchema).max(200),
+    customPatterns: z.array(CustomPatternBackupSchema).max(20).optional(),
     history: z.array(SessionLogEntryBackupSchema).max(50000).optional()
   })
   .strict();
@@ -169,6 +218,12 @@ export interface BackupPreview {
     unchanged: BackupPreviewDiffItem[];
   };
   goals: {
+    totalInBackup: number;
+    toAdd: BackupPreviewDiffItem[];
+    toUpdate: BackupPreviewDiffItem[];
+    unchanged: BackupPreviewDiffItem[];
+  };
+  customPatterns?: {
     totalInBackup: number;
     toAdd: BackupPreviewDiffItem[];
     toUpdate: BackupPreviewDiffItem[];

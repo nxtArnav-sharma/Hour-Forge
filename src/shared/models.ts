@@ -1,4 +1,5 @@
-import { RunMode, TrackState, TrackOverlay, Block } from '../core/types';
+import { RunMode, TrackState, TrackOverlay, Block, CustomStep, CustomPattern } from '../core/types';
+export { CustomStep, CustomPattern };
 
 export type DiscordPresenceMode = 'hourforge' | 'none';
 
@@ -10,11 +11,13 @@ export interface AppSettings {
   onlineStatus: number; // 1 = Online, 7 = Invisible
   familyPin?: string;
   launchPickerCountdownSec: number; // default 60
+  showLaunchPickerAtStartup?: boolean; // default true
   defaultTemplate?: {
     mode: RunMode;
     appIds: number[];
     profileId: string;
     targets?: Record<number, number>; // seconds
+    customPatternId?: string;
   };
   notifyOnBlocked: boolean;
   notifyOnFinish: boolean;
@@ -132,6 +135,8 @@ export interface TrackSnapshot {
   targetSeconds?: number;
   currentBlockIndex: number;
   blocks: Block[];
+  customStepIndex?: number;
+  stepElapsedSec?: number;
 }
 
 export interface RunStateSnapshot {
@@ -143,6 +148,7 @@ export interface RunStateSnapshot {
   runSeed: string;
   tracks: TrackSnapshot[];
   lastSnapshotUtc: number;
+  customPattern?: CustomPattern;
 }
 
 export interface PlaytimeTotals {

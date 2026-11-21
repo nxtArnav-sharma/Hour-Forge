@@ -38,6 +38,7 @@ export const SettingsScreen: React.FC = () => {
   const saveSteamApiKey = useStore(state => state.saveSteamApiKey);
   const removeSteamApiKey = useStore(state => state.removeSteamApiKey);
   const loadInitialData = useStore(state => state.loadInitialData);
+  const appVersion = useStore(state => state.appVersion);
 
   const [formSettings, setFormSettings] = useState<AppSettings | null>(settings);
   const [isSaved, setIsSaved] = useState(false);
@@ -93,9 +94,15 @@ export const SettingsScreen: React.FC = () => {
     };
     fetchStatus();
     const timer = setInterval(fetchStatus, 2500);
+
+    const unsubSettings = window.hourforge?.store?.onSettingsUpdated?.(updated => {
+      if (mounted) setFormSettings(updated);
+    });
+
     return () => {
       mounted = false;
       clearInterval(timer);
+      unsubSettings?.();
     };
   }, []);
 
@@ -609,6 +616,25 @@ export const SettingsScreen: React.FC = () => {
                 className="rounded bg-[#0B0E14] border-[#232B3D] text-purple-600 focus:ring-0"
               />
             </label>
+
+            <label className="flex items-center justify-between p-3 bg-[#080B11]/60 border border-white/[0.08] rounded-xl cursor-pointer">
+              <div>
+                <span className="text-xs font-medium text-slate-200 block">
+                  Show Launch Picker at startup
+                </span>
+                <span className="text-[11px] text-slate-500 block">
+                  When Windows starts, show the floating Launch Picker card with a countdown.
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={formSettings.showLaunchPickerAtStartup !== false}
+                onChange={e =>
+                  setFormSettings({ ...formSettings, showLaunchPickerAtStartup: e.target.checked })
+                }
+                className="rounded bg-[#0B0E14] border-[#232B3D] text-purple-600 focus:ring-0"
+              />
+            </label>
           </div>
         </div>
 
@@ -971,9 +997,11 @@ export const SettingsScreen: React.FC = () => {
               <Info className="w-4 h-4 text-purple-400" />
               About HourForge
             </div>
-            <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/20 font-mono font-medium">
-              v0.1.2
-            </span>
+            {appVersion && (
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/20 font-mono font-medium">
+                {appVersion}
+              </span>
+            )}
           </div>
 
           <p className="text-sm font-medium text-slate-200">

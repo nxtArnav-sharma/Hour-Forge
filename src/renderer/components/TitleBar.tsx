@@ -1,9 +1,21 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Minus, X, Hourglass, Search } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
 export const TitleBar: React.FC = () => {
   const engineState = useStore(state => state.engineState);
+  const storeVersion = useStore(state => state.appVersion);
+  const [version, setVersion] = useState<string>(storeVersion);
+
+  useEffect(() => {
+    if (storeVersion) {
+      setVersion(storeVersion);
+      return;
+    }
+    window.hourforge?.app?.getVersion?.().then(v => {
+      if (v) setVersion(v.startsWith('v') ? v : `v${v}`);
+    }).catch(() => {});
+  }, [storeVersion]);
 
   const isRunning = engineState?.status === 'RUNNING';
   const isPaused = engineState?.status === 'PAUSED';
@@ -17,7 +29,7 @@ export const TitleBar: React.FC = () => {
         <span className="text-xs font-semibold tracking-wider bg-gradient-to-r from-white via-slate-100 to-purple-300 bg-clip-text text-transparent font-sans">
           HOURFORGE
         </span>
-        <span className="text-[10px] text-slate-500 font-mono">v0.1.1</span>
+        {version && <span className="text-[10px] text-slate-500 font-mono">{version}</span>}
 
         {/* Engine status indicator badge */}
         <div className="flex items-center gap-1.5 ml-3 pl-3 border-l border-white/[0.08]">

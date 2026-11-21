@@ -140,19 +140,26 @@ export const ProfilesScreen: React.FC = () => {
 
             {/* Rest Bounds */}
             <div className="space-y-2">
-              <label className="text-xs text-slate-300 font-medium block">
-                Between-Session Rest Bounds (Minutes)
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-slate-300 font-medium block">
+                  Between-Session Rest Bounds (Minutes)
+                </label>
+                <span className="text-[10px] text-purple-400 font-medium">
+                  Breaks are limited to 60 minutes.
+                </span>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <span className="text-[11px] text-slate-500 block mb-1">Min Rest (min)</span>
                   <input
                     type="number"
+                    min="1"
+                    max="60"
                     value={editedProfile.rest.minMin}
                     onChange={e =>
                       setEditedProfile({
                         ...editedProfile,
-                        rest: { ...editedProfile.rest, minMin: parseInt(e.target.value) || 1 }
+                        rest: { ...editedProfile.rest, minMin: Math.min(60, Math.max(1, parseInt(e.target.value) || 1)) }
                       })
                     }
                     className="w-full bg-[#0B0E14] border border-[#232B3D] focus:border-purple-500 rounded-lg px-3 py-1.5 text-xs text-white font-mono"
@@ -162,17 +169,22 @@ export const ProfilesScreen: React.FC = () => {
                   <span className="text-[11px] text-slate-500 block mb-1">Max Rest (min)</span>
                   <input
                     type="number"
+                    min="1"
+                    max="60"
                     value={editedProfile.rest.maxMin}
                     onChange={e =>
                       setEditedProfile({
                         ...editedProfile,
-                        rest: { ...editedProfile.rest, maxMin: parseInt(e.target.value) || 1 }
+                        rest: { ...editedProfile.rest, maxMin: Math.min(60, Math.max(1, parseInt(e.target.value) || 1)) }
                       })
                     }
                     className="w-full bg-[#0B0E14] border border-[#232B3D] focus:border-purple-500 rounded-lg px-3 py-1.5 text-xs text-white font-mono"
                   />
                 </div>
               </div>
+              <p className="text-[10px] text-slate-400">
+                Breaks are limited to 60 minutes.
+              </p>
             </div>
 
             {/* Active Window */}

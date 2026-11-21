@@ -1,5 +1,5 @@
 import { PRNG } from './rng';
-import { HumanProfile } from './types';
+import { HumanProfile, MAX_BREAK_SECONDS, CustomStep } from './types';
 
 function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
@@ -97,6 +97,9 @@ export function sampleRestDurationSec(
     }
   }
 
+  // Hard cap at MAX_BREAK_SECONDS (60 minutes) for all rests
+  rawRestSec = Math.min(MAX_BREAK_SECONDS, rawRestSec);
+
   // Hard floor 60s, or profile minSec if profile allows shorter (e.g. fast-test)
   const floor = Math.min(60, minSec);
   return Math.max(floor, rawRestSec);
@@ -107,5 +110,58 @@ export function sampleRestDurationSec(
  */
 export function sampleBootJitterSec(rng: PRNG, profile: HumanProfile): number {
   return rng.nextInt(profile.bootJitterSec.min, profile.bootJitterSec.max);
+}
+
+/**
+ * Samples a custom step duration in seconds.
+ * If minMin == maxMin: exactly minMin * 60.
+ * Else: truncated log-normal within [min, max] using track RNG.
+ * Play median at 0.4 of range, sigma 0.45.
+ * Rest median at 0.3 of range, sigma 0.6, capped at MAX_BREAK_SECONDS (3600s).
+ */
+export function sampleCustomStepDurationSec(rng: PRNG, step: CustomStep): number {
+  const minSec = Math.round(step.minMin * 60);
+  const maxSec = Math.round(step.maxMin * 60);
+  if (minSec >= maxSec) {
+    return step.type === 'rest' ? Math.min(MAX_BREAK_SECONDS, minSec) : minSec;
+  }
+
+  if (step.type === 'play') {
+    const medianSec = minSec + 0.4 * (maxSec - minSec);
+    const sigma = 0.45;
+    let draw = 0;
+    let attempts = 0;
+    while (attempts < 20) {
+      const z = rng.nextGaussian();
+      const x = medianSec * Math.exp(sigma * z);
+      if (x >= minSec && x <= maxSec) {
+        draw = Math.round(x);
+        break;
+      }
+      attempts++;
+    }
+    if (draw === 0) {
+      draw = rng.nextInt(minSec, maxSec);
+    }
+    return Math.max(1, draw);
+  } else {
+    const medianSec = minSec + 0.3 * (maxSec - minSec);
+    const sigma = 0.6;
+    let draw = 0;
+    let attempts = 0;
+    while (attempts < 20) {
+      const z = rng.nextGaussian();
+      const x = medianSec * Math.exp(sigma * z);
+      if (x >= minSec && x <= maxSec) {
+        draw = Math.round(x);
+        break;
+      }
+      attempts++;
+    }
+    if (draw === 0) {
+      draw = rng.nextInt(minSec, maxSec);
+    }
+    return Math.min(MAX_BREAK_SECONDS, Math.max(1, draw));
+  }
 }
 

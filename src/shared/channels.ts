@@ -15,6 +15,9 @@ export const IPC_CHANNELS = {
   STORE_REMOVE_GAME: 'store:remove-game',
   STORE_GET_PROFILES: 'store:get-profiles',
   STORE_SAVE_PROFILE: 'store:save-profile',
+  STORE_GET_CUSTOM_PATTERNS: 'store:get-custom-patterns',
+  STORE_SAVE_CUSTOM_PATTERN: 'store:save-custom-pattern',
+  STORE_DELETE_CUSTOM_PATTERN: 'store:delete-custom-pattern',
   STORE_GET_HISTORY: 'store:get-history',
 
   // Steam & Client
@@ -34,7 +37,9 @@ export const IPC_CHANNELS = {
   SYSTEM_GET_LOGS: 'system:get-logs',
   SYSTEM_EXPORT_DIAGNOSTICS: 'system:export-diagnostics',
   SYSTEM_OPEN_EXTERNAL_URL: 'system:open-external-url',
+  SYSTEM_OPEN_LAUNCH_PICKER: 'system:open-launch-picker',
   APP_CONSUME_PENDING_ROUTE: 'app:consumePendingRoute',
+  APP_GET_VERSION: 'app:get-version',
 
   // Goals (M11 Catch-Up Goal)
   GOAL_GET_ALL: 'goal:get-all',
@@ -58,7 +63,8 @@ export const IPC_CHANNELS = {
   EVENT_TOAST: 'event:toast',
   EVENT_HOURS_UPDATED: 'event:hours-updated',
   EVENT_GOALS_UPDATED: 'event:goals-updated',
-  EVENT_NAVIGATE: 'event:navigate'
+  EVENT_NAVIGATE: 'event:navigate',
+  EVENT_SETTINGS_UPDATED: 'event:settings-updated'
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

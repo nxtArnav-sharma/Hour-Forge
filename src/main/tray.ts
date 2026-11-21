@@ -63,6 +63,8 @@ export interface TrayManagerCallbacks {
   onOpenDashboard: () => void;
   onOpenSettings: () => void;
   onStartNewRun: () => void;
+  onOpenLaunchPicker?: () => void;
+  onToggleStartupPicker?: (enabled: boolean) => void;
 }
 
 export class TrayManager {
@@ -72,6 +74,9 @@ export class TrayManager {
   private onOpenDashboard: () => void;
   private onOpenSettings: () => void;
   private onStartNewRun: () => void;
+  private onOpenLaunchPicker?: () => void;
+  private onToggleStartupPicker?: (enabled: boolean) => void;
+  private isStartupPickerEnabled: boolean = true;
 
   constructor(
     engine: HourForgeEngine,
@@ -82,6 +87,13 @@ export class TrayManager {
     this.onOpenDashboard = callbacks.onOpenDashboard;
     this.onOpenSettings = callbacks.onOpenSettings;
     this.onStartNewRun = callbacks.onStartNewRun;
+    this.onOpenLaunchPicker = callbacks.onOpenLaunchPicker;
+    this.onToggleStartupPicker = callbacks.onToggleStartupPicker;
+  }
+
+  setStartupPickerEnabled(enabled: boolean): void {
+    this.isStartupPickerEnabled = enabled;
+    this.updateMenu();
   }
 
   initialize(): void {
@@ -114,7 +126,16 @@ export class TrayManager {
         tooltip = `HourForge · Playing ${playingCount} game${playingCount > 1 ? 's' : ''}`;
       } else if (restingCount > 0) {
         iconState = 'resting';
-        tooltip = `HourForge · Resting (${restingCount} track${restingCount > 1 ? 's' : ''})`;
+        const restingTrack = activeTracks.find(t => t.state === 'RESTING');
+        const curBlock = restingTrack?.blocks?.[0];
+        if (curBlock?.reason === 'active_window') {
+          const timeStr = new Date(curBlock.endUtc).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          tooltip = `HourForge · Off hours (plays again at ${timeStr})`;
+        } else if (curBlock?.reason === 'daily_cap') {
+          tooltip = `HourForge · Daily limit reached`;
+        } else {
+          tooltip = `HourForge · Resting (${restingCount} track${restingCount > 1 ? 's' : ''})`;
+        }
       }
 
       // Check overlays
@@ -164,6 +185,10 @@ export class TrayManager {
         click: () => this.onStartNewRun()
       },
       {
+        label: 'Launch Picker...',
+        click: () => this.onOpenLaunchPicker?.()
+      },
+      {
         label: 'Panic Stop',
         enabled: isRunning || isPaused,
         click: async () => {
@@ -176,6 +201,15 @@ export class TrayManager {
         click: () => this.onOpenSettings()
       },
       {
+        label: 'Show Launch Picker at startup',
+        type: 'checkbox',
+        checked: this.isStartupPickerEnabled,
+        click: (menuItem: any) => {
+          this.isStartupPickerEnabled = menuItem.checked;
+          this.onToggleStartupPicker?.(menuItem.checked);
+        }
+      },
+      {
         label: 'Quit',
         click: async () => {
           if (isRunning) {
@@ -185,7 +219,7 @@ export class TrayManager {
               defaultId: 0,
               cancelId: 1,
               title: 'Quit HourForge',
-              message: 'A grinding run is currently active. Quitting will stop playing and close ArchiSteamFarm.',
+              message: 'A grinding run is currently active. Quitting will stop playtime tracking and close all game helpers.',
               detail: 'Are you sure you want to quit?'
             });
 

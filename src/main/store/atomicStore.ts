@@ -3,8 +3,8 @@ import { existsSync } from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { AppSettings, CatchUpGoal, GameEntry, RunStateSnapshot } from '../../shared/models';
-import { HumanProfile, SessionLogEntry } from '../../core/types';
-import { BUILTIN_PROFILES } from '../../core/profiles';
+import { HumanProfile, SessionLogEntry, CustomPattern } from '../../core/types';
+import { BUILTIN_PROFILES, BUILTIN_CUSTOM_PATTERN } from '../../core/profiles';
 
 export interface SafeStorageAdapter {
   isEncryptionAvailable(): boolean;
@@ -64,6 +64,7 @@ export class AtomicStore {
         theme: 'dark',
         onlineStatus: 1,
         launchPickerCountdownSec: 60,
+        showLaunchPickerAtStartup: true,
         notifyOnBlocked: true,
         notifyOnFinish: true,
         notifyOnCrashLoop: true,
@@ -99,6 +100,10 @@ export class AtomicStore {
       }
       if (raw.closeSteamOnQuit === undefined) {
         raw.closeSteamOnQuit = false;
+        modified = true;
+      }
+      if (raw.showLaunchPickerAtStartup === undefined) {
+        raw.showLaunchPickerAtStartup = true;
         modified = true;
       }
       // Migrate legacy Discord settings to discordPresenceMode
@@ -301,11 +306,46 @@ export class AtomicStore {
 
   // --- Profiles ---
   async getProfiles(): Promise<HumanProfile[]> {
-    return this.readJsonFile<HumanProfile[]>('profiles.json');
+    const list = await this.readJsonFile<HumanProfile[]>('profiles.json');
+    let modified = false;
+    const clamped = list.map(p => {
+      if (
+        p.rest &&
+        (p.rest.minMin > 60 || p.rest.maxMin > 60 || p.rest.longMinMin > 60 || p.rest.longMaxMin > 60)
+      ) {
+        modified = true;
+        return {
+          ...p,
+          rest: {
+            ...p.rest,
+            minMin: Math.min(60, p.rest.minMin),
+            maxMin: Math.min(60, p.rest.maxMin),
+            longMinMin: Math.min(60, p.rest.longMinMin),
+            longMaxMin: Math.min(60, p.rest.longMaxMin)
+          },
+          updatedRestNotice: `Profile '${p.name}' was updated: breaks are now limited to 60 minutes.`
+        };
+      }
+      return p;
+    });
+    if (modified) {
+      await this.writeAtomicJson('profiles.json', clamped);
+    }
+    return clamped;
   }
 
   async saveProfiles(profiles: HumanProfile[]): Promise<void> {
-    await this.writeAtomicJson('profiles.json', profiles);
+    const clamped = profiles.map(p => ({
+      ...p,
+      rest: {
+        ...p.rest,
+        minMin: Math.min(60, p.rest.minMin),
+        maxMin: Math.min(60, p.rest.maxMin),
+        longMinMin: Math.min(60, p.rest.longMinMin),
+        longMaxMin: Math.min(60, p.rest.longMaxMin)
+      }
+    }));
+    await this.writeAtomicJson('profiles.json', clamped);
   }
 
   // --- History & Session Logs ---
@@ -405,6 +445,86 @@ export class AtomicStore {
     const goals = await this.getGoals();
     const filtered = goals.filter(g => g.id !== id && String(g.appId) !== id);
     await this.saveGoals(filtered);
+  }
+
+  // --- Custom Patterns (Task 2) ---
+  async getCustomPatterns(): Promise<CustomPattern[]> {
+    const p = this.getFilePath('customPatterns.json');
+    if (!existsSync(p)) {
+      return [BUILTIN_CUSTOM_PATTERN];
+    }
+    try {
+      const list = await this.readJsonFile<CustomPattern[]>('customPatterns.json');
+      if (!Array.isArray(list)) return [BUILTIN_CUSTOM_PATTERN];
+      let modified = false;
+      const clamped = list.map(pat => {
+        let patMod = false;
+        const steps = pat.steps.map(s => {
+          if (s.type === 'rest' && (s.minMin > 60 || s.maxMin > 60)) {
+            patMod = true;
+            return {
+              ...s,
+              minMin: Math.min(60, s.minMin),
+              maxMin: Math.min(60, s.maxMin)
+            };
+          }
+          return s;
+        });
+        if (patMod) modified = true;
+        return { ...pat, steps };
+      });
+      if (!clamped.some(pat => pat.id === BUILTIN_CUSTOM_PATTERN.id)) {
+        clamped.unshift(BUILTIN_CUSTOM_PATTERN);
+        modified = true;
+      }
+      if (modified) {
+        await this.writeAtomicJson('customPatterns.json', clamped);
+      }
+      return clamped;
+    } catch {
+      return [BUILTIN_CUSTOM_PATTERN];
+    }
+  }
+
+  async saveCustomPatterns(patterns: CustomPattern[]): Promise<void> {
+    const clamped = patterns.map(pat => ({
+      ...pat,
+      steps: pat.steps.map(s => s.type === 'rest' ? {
+        ...s,
+        minMin: Math.min(60, s.minMin),
+        maxMin: Math.min(60, s.maxMin)
+      } : s)
+    }));
+    if (!clamped.some(p => p.id === BUILTIN_CUSTOM_PATTERN.id)) {
+      clamped.unshift(BUILTIN_CUSTOM_PATTERN);
+    }
+    await this.writeAtomicJson('customPatterns.json', clamped.slice(0, 20));
+  }
+
+  async saveCustomPattern(pattern: CustomPattern): Promise<void> {
+    if (pattern.id === BUILTIN_CUSTOM_PATTERN.id) {
+      return; // Cannot overwrite builtin
+    }
+    const patterns = await this.getCustomPatterns();
+    const idx = patterns.findIndex(p => p.id === pattern.id);
+    if (idx >= 0) {
+      patterns[idx] = pattern;
+    } else {
+      if (patterns.length >= 20) {
+        throw new Error('Maximum 20 custom patterns allowed');
+      }
+      patterns.push(pattern);
+    }
+    await this.saveCustomPatterns(patterns);
+  }
+
+  async deleteCustomPattern(id: string): Promise<void> {
+    if (id === BUILTIN_CUSTOM_PATTERN.id) {
+      return; // Cannot delete builtin
+    }
+    const patterns = await this.getCustomPatterns();
+    const filtered = patterns.filter(p => p.id !== id);
+    await this.saveCustomPatterns(filtered);
   }
 
   // --- Helper Methods ---

@@ -15,7 +15,8 @@ import {
   Users,
   CheckCircle,
   X,
-  Sparkles
+  Sparkles,
+  Moon
 } from 'lucide-react';
 import {
   BarChart,
@@ -213,6 +214,8 @@ export const DashboardScreen: React.FC = () => {
                     ? 'Single Game Run'
                     : engineState?.mode === 'MULTI'
                     ? 'Multi-Game Run'
+                    : engineState?.mode === 'CUSTOM'
+                    ? `Custom: ${engineState?.customPattern?.name || 'Custom Pattern'}`
                     : `Running (${engineState?.mode})`)
                 : isPaused
                 ? 'Run Paused'
@@ -339,9 +342,32 @@ export const DashboardScreen: React.FC = () => {
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-100 shadow-[0_0_6px_#fff]" /> PLAYING
                         </span>
                       ) : isResting ? (
-                        <span className="px-2.5 py-1 text-[11px] font-semibold bg-amber-500/90 text-white rounded-full flex items-center gap-1 shadow-[0_0_12px_rgba(245,158,11,0.4)]">
-                          <Clock className="w-3 h-3" /> RESTING
-                        </span>
+                        (() => {
+                          const reason = currentBlock?.reason;
+                          const isOffHours = reason === 'active_window';
+                          const isDailyCap = reason === 'daily_cap';
+                          const hasCatchupGoal = goals.some(g => g.appId === track.appId && g.status === 'ACTIVE');
+
+                          if (isOffHours) {
+                            return (
+                              <span className="px-2.5 py-1 text-[11px] font-semibold bg-indigo-500/90 text-white rounded-full flex items-center gap-1 shadow-[0_0_12px_rgba(99,102,241,0.4)]">
+                                <Moon className="w-3 h-3" /> OFF HOURS
+                              </span>
+                            );
+                          }
+                          if (isDailyCap) {
+                            return (
+                              <span className="px-2.5 py-1 text-[11px] font-semibold bg-blue-500/90 text-white rounded-full flex items-center gap-1 shadow-[0_0_12px_rgba(59,130,246,0.4)]">
+                                <CheckCircle className="w-3 h-3" /> {hasCatchupGoal ? 'DAILY GOAL REACHED' : 'DAILY LIMIT REACHED'}
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="px-2.5 py-1 text-[11px] font-semibold bg-amber-500/90 text-white rounded-full flex items-center gap-1 shadow-[0_0_12px_rgba(245,158,11,0.4)]">
+                              <Clock className="w-3 h-3" /> RESTING
+                            </span>
+                          );
+                        })()
                       ) : (
                         <span className="px-2.5 py-1 text-[11px] font-semibold bg-white/10 text-slate-300 rounded-full">
                           {track.state}
@@ -364,7 +390,13 @@ export const DashboardScreen: React.FC = () => {
                     <div>
                       {/* Countdown to next change */}
                       <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                        <span>Next state transition:</span>
+                        <span>
+                          {isResting && currentBlock?.reason === 'active_window'
+                            ? `plays again at ${new Date(currentBlock.endUtc).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                            : isResting && currentBlock?.reason === 'daily_cap'
+                            ? `plays again at ${new Date(currentBlock.endUtc).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                            : 'Next state transition:'}
+                        </span>
                         <span className="font-mono text-purple-400 font-semibold">
                           {countdownStr}
                         </span>

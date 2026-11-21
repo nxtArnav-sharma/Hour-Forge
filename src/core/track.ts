@@ -1,4 +1,4 @@
-import { Block, HumanProfile, TrackOverlay, TrackState, SessionLogEntry } from './types';
+import { Block, HumanProfile, TrackOverlay, TrackState, SessionLogEntry, MAX_BREAK_SECONDS, CustomPattern } from './types';
 import { PRNG, createPRNG, hash32 } from './rng';
 import { planTrackBlocks } from './planner';
 import { getNextDayBoundaryMs } from './calendar';
@@ -12,6 +12,9 @@ export interface TrackOptions {
   t0Utc: number;          // Run start time
   dailyQuotaSeconds?: number;
   getDailyQuotaSeconds?: (nowUtc: number, creditedTodaySec: number) => number;
+  customPattern?: CustomPattern;
+  initialStepIndex?: number;
+  initialStepElapsedSec?: number;
 }
 
 export interface BackendConfirmation {
@@ -26,6 +29,7 @@ export class TrackStateMachine {
   readonly profile: HumanProfile;
   readonly targetSeconds?: number;
   readonly rng: PRNG;
+  readonly customPattern?: CustomPattern;
   private dailyQuotaSeconds?: number;
   private getDailyQuotaSeconds?: (nowUtc: number, creditedTodaySec: number) => number;
 
@@ -35,6 +39,8 @@ export class TrackStateMachine {
   private currentBlockIndex = 0;
   private creditedSeconds = 0;
   private todayCreditedSeconds = 0;
+  private customStepIndex = 0;
+  private stepElapsedSec = 0;
   private currentDayBoundaryMs = 0;
   private activeBlockStartedAtUtc: number | null = null;
   private interruptionStartedAtUtc: number | null = null;
@@ -47,6 +53,9 @@ export class TrackStateMachine {
     this.targetSeconds = options.targetSeconds;
     this.dailyQuotaSeconds = options.dailyQuotaSeconds;
     this.getDailyQuotaSeconds = options.getDailyQuotaSeconds;
+    this.customPattern = options.customPattern;
+    this.customStepIndex = options.initialStepIndex ?? 0;
+    this.stepElapsedSec = options.initialStepElapsedSec ?? 0;
     this.currentDayBoundaryMs = getNextDayBoundaryMs(options.t0Utc);
 
     const trackSeed = hash32(options.runSeed, options.appId);
@@ -61,7 +70,10 @@ export class TrackStateMachine {
         creditedSeconds: 0,
         startTimeUtc: options.t0Utc,
         isFirstBlockOfRun: true,
-        dailyQuotaSeconds: this.getEffectiveDailyQuota(options.t0Utc)
+        dailyQuotaSeconds: this.getEffectiveDailyQuota(options.t0Utc),
+        customPattern: this.customPattern,
+        startStepIndex: this.customStepIndex,
+        initialStepElapsedSec: this.stepElapsedSec
       },
       8
     );
@@ -100,6 +112,14 @@ export class TrackStateMachine {
     this.todayCreditedSeconds = sec;
   }
 
+  getCustomStepIndex(): number {
+    return this.customStepIndex;
+  }
+
+  getStepElapsedSec(): number {
+    return this.stepElapsedSec;
+  }
+
   getDailyQuotaSecondsValue(): number | undefined {
     return this.dailyQuotaSeconds;
   }
@@ -129,7 +149,7 @@ export class TrackStateMachine {
 
       // Section 7.7: If interruption lasted > 30 minutes, replan with fresh rest
       if (interruptionDurationMs > 30 * 60 * 1000) {
-        this.replan(nowUtc);
+        this.replan(nowUtc, interruptionDurationMs);
       }
     }
 
@@ -197,6 +217,7 @@ export class TrackStateMachine {
       }
       this.creditedSeconds += 1;
       this.todayCreditedSeconds += 1;
+      this.stepElapsedSec += 1;
 
       // Check daily cap completion (hard ceiling to the second)
       if (finalDailyCapSec !== undefined && this.todayCreditedSeconds >= finalDailyCapSec) {
@@ -218,6 +239,10 @@ export class TrackStateMachine {
     if (nowUtc >= currentBlock.endUtc) {
       this.finalizeCurrentBlock(nowUtc, isPlayBlock ? 'schedule' : undefined);
       this.currentBlockIndex += 1;
+      if (this.customPattern && currentBlock.reason === 'sample') {
+        this.customStepIndex = (this.customStepIndex + 1) % this.customPattern.steps.length;
+        this.stepElapsedSec = 0;
+      }
 
       if (this.currentBlockIndex >= this.blocks.length) {
         if (this.targetSeconds !== undefined && this.creditedSeconds >= this.targetSeconds) {
@@ -258,7 +283,32 @@ export class TrackStateMachine {
     }
   }
 
-  replan(nowUtc: number): void {
+  extendRest(seconds: number): void {
+    const cur = this.getCurrentBlock();
+    if (cur && cur.type === 'rest' && cur.reason === 'sample') {
+      const allowed = Math.max(0, MAX_BREAK_SECONDS - cur.durationSec);
+      const addedSec = Math.min(seconds, allowed);
+      if (addedSec > 0) {
+        cur.durationSec += addedSec;
+        cur.endUtc += addedSec * 1000;
+        for (let i = this.currentBlockIndex + 1; i < this.blocks.length; i++) {
+          const b = this.blocks[i]!;
+          b.startUtc += addedSec * 1000;
+          b.endUtc += addedSec * 1000;
+        }
+      }
+    }
+  }
+
+  replan(nowUtc: number, gapMs?: number): void {
+    if (this.customPattern && gapMs !== undefined && gapMs >= 30 * 60 * 1000) {
+      // If gap lasted 30 minutes or more, skip to next rest step
+      while (this.customPattern.steps[this.customStepIndex]?.type !== 'rest') {
+        this.customStepIndex = (this.customStepIndex + 1) % this.customPattern.steps.length;
+      }
+      this.stepElapsedSec = 0;
+    }
+
     // Keep completed blocks, replan upcoming unlocked blocks from nowUtc
     const completed = this.blocks.slice(0, this.currentBlockIndex);
     const newBlocks = planTrackBlocks(
@@ -269,7 +319,10 @@ export class TrackStateMachine {
         creditedSeconds: this.creditedSeconds,
         todayCreditedSeconds: this.todayCreditedSeconds,
         startTimeUtc: nowUtc,
-        dailyQuotaSeconds: this.getEffectiveDailyQuota(nowUtc)
+        dailyQuotaSeconds: this.getEffectiveDailyQuota(nowUtc),
+        customPattern: this.customPattern,
+        startStepIndex: this.customStepIndex,
+        initialStepElapsedSec: this.stepElapsedSec
       },
       6
     );
@@ -306,7 +359,10 @@ export class TrackStateMachine {
         creditedSeconds: this.creditedSeconds,
         todayCreditedSeconds: this.todayCreditedSeconds,
         startTimeUtc: nowUtc,
-        dailyQuotaSeconds: this.getEffectiveDailyQuota(nowUtc)
+        dailyQuotaSeconds: this.getEffectiveDailyQuota(nowUtc),
+        customPattern: this.customPattern,
+        startStepIndex: this.customStepIndex,
+        initialStepElapsedSec: this.stepElapsedSec
       },
       6
     );

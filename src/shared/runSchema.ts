@@ -1,6 +1,57 @@
 import { z } from 'zod';
 import { GameEntry, CatchUpGoal } from './models';
 
+export const CustomStepSchema = z
+  .object({
+    type: z.enum(['play', 'rest']),
+    minMin: z.number().int().min(1).max(480),
+    maxMin: z.number().int().min(1).max(480)
+  })
+  .strict()
+  .refine(s => s.minMin <= s.maxMin, {
+    message: 'minMin must be <= maxMin'
+  })
+  .superRefine((s, ctx) => {
+    if (s.type === 'play') {
+      if (s.minMin < 5 || s.maxMin > 480) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Play steps must be between 5 and 480 minutes.'
+        });
+      }
+    } else if (s.type === 'rest') {
+      if (s.minMin < 1 || s.maxMin > 60) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Breaks are limited to 60 minutes.'
+        });
+      }
+    }
+  });
+
+export const CustomPatternSchema = z
+  .object({
+    id: z.string().min(1).max(50),
+    name: z.string().trim().min(1).max(40),
+    steps: z.array(CustomStepSchema).min(2).max(12).refine(steps => {
+      const hasPlay = steps.some(s => s.type === 'play');
+      const hasRest = steps.some(s => s.type === 'rest');
+      return hasPlay && hasRest;
+    }, {
+      message: 'Pattern must contain at least one play step and one rest step.'
+    }),
+    dailyLimitHours: z.number().min(1).max(24).optional(),
+    activeWindow: z
+      .object({
+        start: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, 'Invalid activeWindow start time (HH:mm)'),
+        end: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, 'Invalid activeWindow end time (HH:mm)'),
+        edgeJitterMin: z.number().int().min(0).max(15)
+      })
+      .strict()
+      .optional()
+  })
+  .strict();
+
 export const RunTrackSchema = z.object({
   appId: z.number().int().positive(),
   targetHours: z.number().positive().optional(),
@@ -8,14 +59,15 @@ export const RunTrackSchema = z.object({
 });
 
 export const StartRunInputSchema = z.object({
-  mode: z.enum(['SINGLE', 'MULTI', 'DEDICATED', 'CATCHUP']),
+  mode: z.enum(['SINGLE', 'MULTI', 'DEDICATED', 'CATCHUP', 'CUSTOM']),
   tracks: z.array(RunTrackSchema),
   profile: z.object({
     id: z.string(),
     name: z.string()
   }).passthrough(),
   runSeed: z.string().optional(),
-  delayMs: z.number().nonnegative().optional()
+  delayMs: z.number().nonnegative().optional(),
+  customPattern: CustomPatternSchema.optional()
 });
 
 export type ValidatedStartRunOptions = z.infer<typeof StartRunInputSchema>;
@@ -75,6 +127,15 @@ export function validateRunOptions(
           throw new Error(`CATCHUP mode track ${t.appId} has no active goal`);
         }
       }
+      break;
+    case 'CUSTOM':
+      if (parsed.tracks.length < 1 || parsed.tracks.length > 10) {
+        throw new Error('CUSTOM mode requires between 1 and 10 tracks');
+      }
+      if (!parsed.customPattern) {
+        throw new Error('CUSTOM mode requires a customPattern');
+      }
+      CustomPatternSchema.parse(parsed.customPattern);
       break;
   }
 

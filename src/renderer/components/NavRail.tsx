@@ -10,7 +10,8 @@ import {
   Terminal,
   Settings,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Info
 } from 'lucide-react';
 import { useStore, NavRoute } from '../store/useStore';
 import { CREDIT_TEXT, APP_REPO_URL } from '../../shared/credit';
@@ -86,14 +87,26 @@ export const NavRail: React.FC = () => {
 
       {/* Sidebar Footer with Author Credit & Collapse toggle button */}
       <div className="p-3 border-t border-white/[0.08] flex flex-col gap-2">
-        {!collapsed && (
+        {collapsed ? (
+          <div
+            onClick={() => window.hourforge?.system?.openExternal?.(APP_REPO_URL)}
+            className="flex justify-center cursor-pointer text-slate-500 hover:text-purple-300 transition-colors py-1"
+            title={CREDIT_TEXT}
+          >
+            <Info className="w-4 h-4" />
+          </div>
+        ) : (
           <div
             onClick={() => window.hourforge?.system?.openExternal?.(APP_REPO_URL)}
             className="cursor-pointer group select-none text-[10px] text-slate-500 hover:text-slate-300 transition-colors leading-tight"
             title={CREDIT_TEXT}
           >
-            <span className="block truncate font-medium text-slate-400 group-hover:text-purple-300">By Arnav Sharma</span>
-            <span className="block truncate text-[9px] text-slate-600 group-hover:text-slate-400 font-mono">Discord: Lesserkeyofsolomon</span>
+            <span className="block truncate font-medium text-slate-400 group-hover:text-purple-300">
+              Sculpted to Life by Arnav Sharma
+            </span>
+            <span className="block truncate text-[9px] text-slate-600 group-hover:text-slate-400 font-mono">
+              Discord:- Lesserkeyofsolomon
+            </span>
           </div>
         )}
         <div className="flex justify-end">

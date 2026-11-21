@@ -57,6 +57,12 @@ export const App: React.FC = () => {
         '9': 'settings'
       };
 
+      if (e.ctrlKey && e.shiftKey && (e.key === 'L' || e.key === 'l')) {
+        e.preventDefault();
+        window.hourforge?.system?.openLaunchPicker?.();
+        return;
+      }
+
       const targetRoute = routeMap[e.key];
       if (!isPaletteOpen && targetRoute) {
         e.preventDefault();
@@ -68,7 +74,7 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isPaletteOpen, navigate]);
 
-  const isPickerCard = window.location.hash === '#launch-picker-card';
+  const isPickerCard = window.location.hash.startsWith('#launch-picker-card');
   if (isPickerCard) {
     return <LaunchPickerCard />;
   }

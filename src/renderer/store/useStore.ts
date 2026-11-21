@@ -5,7 +5,8 @@ import {
   GameEntry,
   GoalPacingReport,
   RunStateSnapshot,
-  SteamHoursSnapshot
+  SteamHoursSnapshot,
+  CustomPattern
 } from '../../shared/models';
 import { HumanProfile, SessionLogEntry, RunMode } from '../../core/types';
 import { type NavRoute, NavRouteSchema } from '../../shared/routes';
@@ -22,7 +23,9 @@ interface AppStoreState {
   helperLogs: string[];
   steamHours: SteamHoursSnapshot | null;
   goals: CatchUpGoal[];
+  customPatterns: CustomPattern[];
   pacingReports: Record<number, GoalPacingReport>;
+  appVersion: string;
   isLoading: boolean;
 
   // Navigation
@@ -37,6 +40,7 @@ interface AppStoreState {
     tracks: Array<{ appId: number; targetHours?: number; dailyQuotaHours?: number }>;
     profileId: string;
     delayMs?: number;
+    customPattern?: CustomPattern;
   }) => Promise<void>;
   stopRun: () => Promise<void>;
   pauseAll: () => Promise<void>;
@@ -50,6 +54,8 @@ interface AppStoreState {
   removeGame: (appId: number) => Promise<void>;
   reorderGames: (fromIndex: number, toIndex: number) => void;
   saveProfile: (profile: HumanProfile) => Promise<void>;
+  saveCustomPattern: (pattern: CustomPattern) => Promise<void>;
+  deleteCustomPattern: (id: string) => Promise<void>;
 
   // Steam
   addFreeLicense: (appId: number) => Promise<void>;
@@ -81,7 +87,9 @@ export const useStore = create<AppStoreState>((set, get) => ({
   helperLogs: [],
   steamHours: null,
   goals: [],
+  customPatterns: [],
   pacingReports: {},
+  appVersion: '',
   isLoading: true,
 
   navigate: (route: NavRoute) => {
@@ -96,7 +104,7 @@ export const useStore = create<AppStoreState>((set, get) => ({
 
   loadInitialData: async () => {
     try {
-      const [settings, games, profiles, history, engineState, logs, steamHours, goals, pendingRoute] =
+      const [settings, games, profiles, history, engineState, logs, steamHours, goals, customPatterns, pendingRoute, rawVersion] =
         await Promise.all([
           window.hourforge.store.getSettings(),
           window.hourforge.store.getGames(),
@@ -106,8 +114,12 @@ export const useStore = create<AppStoreState>((set, get) => ({
           window.hourforge.system.getLogs(),
           window.hourforge.steam.getHoursStatus(),
           window.hourforge.goals.getGoals(),
-          window.hourforge.app.consumePendingRoute()
+          window.hourforge.store.getCustomPatterns(),
+          window.hourforge.app.consumePendingRoute(),
+          window.hourforge.app.getVersion().catch(() => '')
         ]);
+
+      const appVersion = rawVersion ? (rawVersion.startsWith('v') ? rawVersion : `v${rawVersion}`) : '';
 
       // Load pacing reports for all goals
       const pacingReports: Record<number, GoalPacingReport> = {};
@@ -139,7 +151,9 @@ export const useStore = create<AppStoreState>((set, get) => ({
         helperLogs: logs.helperLogs || [],
         steamHours,
         goals,
+        customPatterns,
         pacingReports,
+        appVersion,
         isLoading: false
       });
 
@@ -261,6 +275,18 @@ export const useStore = create<AppStoreState>((set, get) => ({
     await window.hourforge.store.saveProfile(profile);
     const profiles = await window.hourforge.store.getProfiles();
     set({ profiles });
+  },
+
+  saveCustomPattern: async pattern => {
+    await window.hourforge.store.saveCustomPattern(pattern);
+    const customPatterns = await window.hourforge.store.getCustomPatterns();
+    set({ customPatterns });
+  },
+
+  deleteCustomPattern: async id => {
+    await window.hourforge.store.deleteCustomPattern(id);
+    const customPatterns = await window.hourforge.store.getCustomPatterns();
+    set({ customPatterns });
   },
 
   addFreeLicense: async appId => {

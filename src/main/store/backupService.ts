@@ -47,7 +47,25 @@ export class BackupService {
 
   constructor(deps: BackupServiceDeps) {
     this.store = deps.store;
-    this.appVersion = deps.appVersion || '0.1.1';
+    let resolvedVersion = deps.appVersion;
+    if (!resolvedVersion) {
+      try {
+        const { app } = require('electron');
+        resolvedVersion = app?.getVersion?.();
+      } catch {
+        // electron not available in unit tests
+      }
+    }
+    if (!resolvedVersion) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const pkg = require('../../../package.json');
+        resolvedVersion = pkg.version;
+      } catch {
+        resolvedVersion = '0.1.0';
+      }
+    }
+    this.appVersion = resolvedVersion || '0.1.0';
     this.backupsDir = path.join(this.store.dataDir, 'backups');
     this.isRunActive = deps.isRunActive;
   }
@@ -56,12 +74,13 @@ export class BackupService {
    * Exports a versioned, secret-free JSON backup string.
    */
   async exportBackup(includeHistory: boolean = false): Promise<{ jsonString: string; filename: string }> {
-    const [rawSettings, games, profiles, goals, history] = await Promise.all([
+    const [rawSettings, games, profiles, goals, history, customPatterns] = await Promise.all([
       this.store.getSettings(),
       this.store.getGames(),
       this.store.getProfiles(),
       this.store.getGoals(),
-      includeHistory ? this.store.getHistory() : Promise.resolve([])
+      includeHistory ? this.store.getHistory() : Promise.resolve([]),
+      this.store.getCustomPatterns()
     ]);
 
     // Sanitize settings: strip API keys, SteamID, account names, credentials, family PIN
@@ -107,6 +126,7 @@ export class BackupService {
       games,
       profiles,
       goals: sanitizedGoals,
+      customPatterns,
       history: includeHistory ? history : undefined
     };
 
@@ -225,6 +245,25 @@ export class BackupService {
       }
     }
 
+    // Calculate CustomPatterns diff
+    const curPatternMap = new Map((await this.store.getCustomPatterns()).map(p => [p.id, p]));
+    const patternsToAdd: { id: string; label: string }[] = [];
+    const patternsToUpdate: { id: string; label: string }[] = [];
+    const patternsUnchanged: { id: string; label: string }[] = [];
+
+    if (backup.customPatterns) {
+      for (const pat of backup.customPatterns) {
+        const existing = curPatternMap.get(pat.id);
+        if (!existing) {
+          patternsToAdd.push({ id: pat.id, label: pat.name });
+        } else if (JSON.stringify(existing) === JSON.stringify(pat)) {
+          patternsUnchanged.push({ id: pat.id, label: pat.name });
+        } else {
+          patternsToUpdate.push({ id: pat.id, label: pat.name });
+        }
+      }
+    }
+
     return {
       schemaVersion: backup.schemaVersion,
       exportedAtUtc: backup.exportedAtUtc,
@@ -247,6 +286,14 @@ export class BackupService {
         toUpdate: goalsToUpdate,
         unchanged: goalsUnchanged
       },
+      customPatterns: backup.customPatterns
+        ? {
+            totalInBackup: backup.customPatterns.length,
+            toAdd: patternsToAdd,
+            toUpdate: patternsToUpdate,
+            unchanged: patternsUnchanged
+          }
+        : undefined,
       historyCount: backup.history ? backup.history.length : 0,
       hasSettings: true
     };
@@ -268,13 +315,14 @@ export class BackupService {
     // 2. Create automatic rolling backup of current state
     await this.createRollingBackup();
 
-    const [currentSettings, currentGames, currentProfiles, currentGoals, currentHistory] =
+    const [currentSettings, currentGames, currentProfiles, currentGoals, currentHistory, currentCustomPatterns] =
       await Promise.all([
         this.store.getSettings(),
         this.store.getGames(),
         this.store.getProfiles(),
         this.store.getGoals(),
-        this.store.getHistory()
+        this.store.getHistory(),
+        this.store.getCustomPatterns()
       ]);
 
     if (mode === 'REPLACE') {
@@ -288,10 +336,13 @@ export class BackupService {
       };
       await this.store.saveSettings(mergedSettings);
 
-      // Replace games, profiles, goals
+      // Replace games, profiles, goals, custom patterns
       await this.store.saveGames(backup.games.map(g => this.normalizeGame(g)));
       await this.store.saveProfiles(backup.profiles.map(p => this.normalizeProfile(p)));
       await this.store.saveGoals(backup.goals);
+      if (backup.customPatterns) {
+        await this.store.saveCustomPatterns(backup.customPatterns);
+      }
 
       // If backup has history, replace history
       if (backup.history) {
@@ -329,6 +380,15 @@ export class BackupService {
         goalMap.set(g.appId, g);
       }
       await this.store.saveGoals(Array.from(goalMap.values()));
+
+      // Merge custom patterns
+      if (backup.customPatterns && backup.customPatterns.length > 0) {
+        const patMap = new Map<string, any>(currentCustomPatterns.map(p => [p.id, p]));
+        for (const pat of backup.customPatterns) {
+          patMap.set(pat.id, pat);
+        }
+        await this.store.saveCustomPatterns(Array.from(patMap.values()));
+      }
 
       // Merge history if present
       if (backup.history && backup.history.length > 0) {
@@ -500,11 +560,18 @@ export class BackupService {
   }
 
   private normalizeProfile(p: any): HumanProfile {
+    const rawRest = p.rest || { minMin: 15, maxMin: 30, longChance: 0.15, longMinMin: 35, longMaxMin: 60 };
     return {
       id: p.id,
       name: p.name,
       session: p.session || { minMin: 45, maxMin: 120 },
-      rest: p.rest || { minMin: 15, maxMin: 30, longChance: 0.15, longMinMin: 45, longMaxMin: 90 },
+      rest: {
+        minMin: Math.min(60, rawRest.minMin),
+        maxMin: Math.min(60, rawRest.maxMin),
+        longChance: rawRest.longChance ?? 0.15,
+        longMinMin: Math.min(60, rawRest.longMinMin ?? rawRest.minMin),
+        longMaxMin: Math.min(60, rawRest.longMaxMin ?? rawRest.maxMin)
+      },
       restScalesWithSession: p.restScalesWithSession ?? true,
       bootJitterSec: p.bootJitterSec || { min: 60, max: 180 },
       activeWindow: p.activeWindow,

@@ -84,7 +84,15 @@ export const PlanScreen: React.FC = () => {
                               : 'bg-amber-500/20 border border-amber-400/40 text-amber-300 hover:bg-amber-500/30'
                           }`}
                         >
-                          <span className="truncate font-medium">{isPlay ? 'PLAY' : 'REST'}</span>
+                          <span className="truncate font-medium">
+                            {isPlay
+                              ? 'PLAY'
+                              : b.reason === 'active_window'
+                              ? 'OFF HOURS'
+                              : b.reason === 'daily_cap'
+                              ? 'DAILY LIMIT'
+                              : 'REST'}
+                          </span>
                           <span className="text-[10px] opacity-80">{durMin}m</span>
                         </div>
                       );

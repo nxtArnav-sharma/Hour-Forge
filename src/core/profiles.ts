@@ -1,4 +1,15 @@
-import { HumanProfile } from './types';
+import { HumanProfile, CustomPattern } from './types';
+
+export const BUILTIN_CUSTOM_PATTERN: CustomPattern = {
+  id: 'builtin-example',
+  name: 'My original example',
+  steps: [
+    { type: 'play', minMin: 60, maxMin: 60 },
+    { type: 'rest', minMin: 5, maxMin: 5 },
+    { type: 'play', minMin: 120, maxMin: 120 },
+    { type: 'rest', minMin: 60, maxMin: 60 }
+  ]
+};
 
 export const BUILTIN_PROFILES: Record<string, HumanProfile> = {
   casual: {
@@ -9,8 +20,8 @@ export const BUILTIN_PROFILES: Record<string, HumanProfile> = {
       minMin: 5,
       maxMin: 30,
       longChance: 0.15,
-      longMinMin: 45,
-      longMaxMin: 120
+      longMinMin: 35,
+      longMaxMin: 60
     },
     restScalesWithSession: true,
     bootJitterSec: { min: 45, max: 420 },
@@ -26,8 +37,8 @@ export const BUILTIN_PROFILES: Record<string, HumanProfile> = {
       minMin: 5,
       maxMin: 45,
       longChance: 0.2,
-      longMinMin: 60,
-      longMaxMin: 150
+      longMinMin: 45,
+      longMaxMin: 60
     },
     restScalesWithSession: true,
     bootJitterSec: { min: 45, max: 420 },
@@ -44,7 +55,7 @@ export const BUILTIN_PROFILES: Record<string, HumanProfile> = {
       maxMin: 20,
       longChance: 0.1,
       longMinMin: 30,
-      longMaxMin: 90
+      longMaxMin: 60
     },
     restScalesWithSession: true,
     bootJitterSec: { min: 30, max: 180 },
@@ -58,10 +69,10 @@ export const BUILTIN_PROFILES: Record<string, HumanProfile> = {
     session: { minMin: 30, maxMin: 90 },
     rest: {
       minMin: 10,
-      maxMin: 60,
+      maxMin: 45,
       longChance: 0.25,
-      longMinMin: 60,
-      longMaxMin: 180
+      longMinMin: 45,
+      longMaxMin: 60
     },
     restScalesWithSession: true,
     bootJitterSec: { min: 45, max: 300 },

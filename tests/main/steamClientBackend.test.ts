@@ -76,7 +76,7 @@ describe('SteamDetector (Fake Registry & Process Providers)', () => {
     const detector = new SteamDetector({
       queryRegistry: async (key): Promise<Record<string, string | number>> => {
         if (key.includes('ActiveProcess')) {
-          return { pid: 12345, ActiveUser: 0x25e4400 };
+          return { pid: 12345, ActiveUser: 12345 };
         }
         return {
           SteamPath: 'C:\\Program Files (x86)\\Steam',
@@ -151,8 +151,7 @@ describe('SteamDetector (Fake Registry & Process Providers)', () => {
   });
 
   it('falls back to ActiveUser DWORD mathematical derivation when loginusers.vdf is missing', async () => {
-    const fakeActiveUser = 0x25e4400; // decimal 39734272
-    // Expected SteamID64 = 76561197960265728 + 39734272 = 76561198000000000
+    const fakeActiveUser = 12345;
     const expectedDerivedSteamId64 = (BigInt('76561197960265728') + BigInt(fakeActiveUser)).toString();
 
     const detector = new SteamDetector({

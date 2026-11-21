@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, globalShortcut } from 'electron';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
@@ -155,19 +155,27 @@ function createMainWindow(): BrowserWindow {
   return mainWindow;
 }
 
-function createLaunchPickerWindow(): BrowserWindow {
-  if (pickerWindow && !pickerWindow.isDestroyed()) {
-    pickerWindow.showInactive();
-    return pickerWindow;
-  }
-
+function createLaunchPickerWindow(focus: boolean = false, mode: 'auto' | 'manual' = 'auto'): BrowserWindow {
   const { screen } = require('electron');
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.workAreaSize;
+  const cursorPoint = screen.getCursorScreenPoint();
+  const currentDisplay = screen.getDisplayNearestPoint(cursorPoint);
+  const { x: displayX, y: displayY, width, height } = currentDisplay.workArea;
   const cardWidth = 440;
   const cardHeight = 620;
-  const x = Math.max(0, width - cardWidth - 16);
-  const y = Math.max(0, height - cardHeight - 16);
+  const x = Math.max(displayX, displayX + width - cardWidth - 16);
+  const y = Math.max(displayY, displayY + height - cardHeight - 16);
+
+  if (pickerWindow && !pickerWindow.isDestroyed()) {
+    pickerWindow.setBounds({ x, y, width: cardWidth, height: cardHeight });
+    if (focus) {
+      pickerWindow.show();
+      pickerWindow.focus();
+    } else {
+      pickerWindow.showInactive();
+    }
+    pickerWindow.webContents.send('launch-picker-mode', mode);
+    return pickerWindow;
+  }
 
   pickerWindow = new BrowserWindow({
     width: cardWidth,
@@ -191,10 +199,17 @@ function createLaunchPickerWindow(): BrowserWindow {
   });
 
   pickerWindow.once('ready-to-show', () => {
-    pickerWindow?.showInactive();
+    if (focus) {
+      pickerWindow?.show();
+      pickerWindow?.focus();
+    } else {
+      pickerWindow?.showInactive();
+    }
+    pickerWindow?.webContents.send('launch-picker-mode', mode);
     devSimLog('[HOURFORGE_PICKER_CARD_SHOWN]', {
       x,
       y,
+      mode,
       isVisible: pickerWindow?.isVisible() ?? false
     });
   });
@@ -204,11 +219,12 @@ function createLaunchPickerWindow(): BrowserWindow {
   });
 
   const devUrl = process.env.VITE_DEV_SERVER_URL;
+  const hash = mode === 'manual' ? 'launch-picker-card?mode=manual' : 'launch-picker-card';
   if (devUrl) {
-    pickerWindow.loadURL(`${devUrl}#launch-picker-card`);
+    pickerWindow.loadURL(`${devUrl}#${hash}`);
   } else {
     pickerWindow.loadFile(path.join(__dirname, '../renderer/index.html'), {
-      hash: 'launch-picker-card'
+      hash
     });
   }
 
@@ -304,11 +320,24 @@ app.whenReady().then(async () => {
     onStartNewRun: () => {
       routeManager.navigateTo('new-run');
     },
+    onOpenLaunchPicker: () => {
+      createLaunchPickerWindow(true, 'manual');
+    },
+    onToggleStartupPicker: async (enabled: boolean) => {
+      const s = await store.getSettings();
+      s.showLaunchPickerAtStartup = enabled;
+      await store.saveSettings(s);
+      trayManager.setStartupPickerEnabled(enabled);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(IPC_CHANNELS.EVENT_SETTINGS_UPDATED, s);
+      }
+    },
     onOpenSettings: () => {
       routeManager.navigateTo('settings');
     }
   });
   trayManager.initialize();
+  trayManager.setStartupPickerEnabled(settings.showLaunchPickerAtStartup !== false);
   devSimLog('[HOURFORGE_MAIN_TRAY]', { trayCreated: trayManager.hasTray() });
 
   // 5.1 Initialize Goal Manager (M11 Catch-Up Goal)
@@ -405,7 +434,37 @@ app.whenReady().then(async () => {
 
   // 7. Show Launch Picker card if autostart, or full MainWindow if normal start
   if (isAutostart) {
-    createLaunchPickerWindow();
+    if (settings.showLaunchPickerAtStartup !== false) {
+      createLaunchPickerWindow();
+    } else {
+      // Silently run default action if template present
+      if (settings.defaultTemplate?.appIds && settings.defaultTemplate.appIds.length > 0) {
+        const games = await store.getGames();
+        const enabledGames = games.filter(g => g.enabled !== false);
+        const valid = settings.defaultTemplate.appIds.filter(id => enabledGames.some(g => g.appId === id));
+        if (valid.length > 0) {
+          const profiles = await store.getProfiles();
+          const prof = profiles.find(p => p.id === (settings.defaultTemplate?.profileId || 'regular')) || profiles[0]!;
+          const tracks = valid.map(appId => ({
+            appId,
+            targetHours: settings.defaultTemplate?.targets?.[appId]
+              ? settings.defaultTemplate.targets[appId] / 3600
+              : 1
+          }));
+          let customPat;
+          if (settings.defaultTemplate.mode === 'CUSTOM') {
+            const patterns = await store.getCustomPatterns();
+            customPat = patterns.find(p => p.id === settings.defaultTemplate?.customPatternId) || patterns[0];
+          }
+          await engine.startRun({
+            mode: settings.defaultTemplate.mode,
+            tracks,
+            profile: prof,
+            customPattern: customPat
+          });
+        }
+      }
+    }
   } else if (!settings.startHidden) {
     createMainWindow();
   }
@@ -417,6 +476,22 @@ app.whenReady().then(async () => {
   // Focus existing on second instance
   app.on('second-instance', () => {
     createMainWindow();
+  });
+
+  try {
+    globalShortcut.register('CommandOrControl+Shift+L', () => {
+      createLaunchPickerWindow(true, 'manual');
+    });
+  } catch {
+    // globalShortcut unavailable in some test runtimes
+  }
+
+  app.on('will-quit', () => {
+    try {
+      globalShortcut.unregisterAll();
+    } catch {
+      // ignore
+    }
   });
 
   const exitAfterIdx = process.argv.indexOf('--exit-after-ms');
@@ -438,7 +513,8 @@ function registerIpcHandlers() {
       mode: opts.mode as RunMode,
       tracks: opts.tracks,
       profile,
-      delayMs: opts.delayMs
+      delayMs: opts.delayMs,
+      customPattern: opts.customPattern
     });
     if (pickerWindow && !pickerWindow.isDestroyed()) {
       pickerWindow.close();
@@ -481,6 +557,10 @@ function registerIpcHandlers() {
     if (discordRpcService) {
       await discordRpcService.onSettingsUpdated(newSettings);
     }
+    trayManager?.setStartupPickerEnabled(newSettings.showLaunchPickerAtStartup !== false);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC_CHANNELS.EVENT_SETTINGS_UPDATED, newSettings);
+    }
   });
 
   ipcMain.handle(IPC_CHANNELS.STORE_GET_GAMES, async () => {
@@ -514,6 +594,18 @@ function registerIpcHandlers() {
       profiles.push(profile);
     }
     await store.saveProfiles(profiles);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.STORE_GET_CUSTOM_PATTERNS, async () => {
+    return store.getCustomPatterns();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.STORE_SAVE_CUSTOM_PATTERN, async (_event, pattern) => {
+    await store.saveCustomPattern(pattern);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.STORE_DELETE_CUSTOM_PATTERN, async (_event, id: string) => {
+    await store.deleteCustomPattern(id);
   });
 
   ipcMain.handle(IPC_CHANNELS.STORE_GET_HISTORY, async () => {
@@ -648,6 +740,10 @@ function registerIpcHandlers() {
     return routeManager.consumePendingRoute();
   });
 
+  ipcMain.handle(IPC_CHANNELS.APP_GET_VERSION, () => {
+    return app.getVersion();
+  });
+
   // System & Window Handlers
   ipcMain.on(IPC_CHANNELS.SYSTEM_WINDOW_MINIMIZE, () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -676,6 +772,10 @@ function registerIpcHandlers() {
       throw new Error(`Disallowed external URL: ${url}`);
     }
     await shell.openExternal(url);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SYSTEM_OPEN_LAUNCH_PICKER, () => {
+    createLaunchPickerWindow(true, 'manual');
   });
 }
 

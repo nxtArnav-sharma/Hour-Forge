@@ -1,7 +1,7 @@
 import { SteamBackend, BackendStatus } from '../../shared/backend';
 import { AtomicStore } from '../store/atomicStore';
 import { TrackStateMachine } from '../../core/track';
-import { HumanProfile, RunMode, TrackOverlay } from '../../core/types';
+import { HumanProfile, RunMode, TrackOverlay, CustomPattern } from '../../core/types';
 import { RunStateSnapshot, TrackSnapshot } from '../../shared/models';
 import { validateRunOptions } from '../../shared/runSchema';
 
@@ -11,6 +11,7 @@ export interface StartRunOptions {
   profile: HumanProfile;
   runSeed?: string;
   delayMs?: number;
+  customPattern?: CustomPattern;
 }
 
 export type EngineEventCallback = (snapshot: RunStateSnapshot) => void;
@@ -24,6 +25,7 @@ export class HourForgeEngine {
   private runId: string | null = null;
   private mode: RunMode = 'SINGLE';
   private profile: HumanProfile | null = null;
+  private customPattern: CustomPattern | null = null;
   private runSeed: string = '';
   private t0Utc = 0;
   private status: 'IDLE' | 'STARTING' | 'RUNNING' | 'PAUSED' | 'FINISHED' | 'STOPPED' = 'IDLE';
@@ -67,7 +69,9 @@ export class HourForgeEngine {
         dailyQuotaSeconds: t.getDailyQuotaSecondsValue(),
         targetSeconds: t.targetSeconds,
         currentBlockIndex: Math.max(0, curIdx),
-        blocks: allBlocks
+        blocks: allBlocks,
+        customStepIndex: t.getCustomStepIndex(),
+        stepElapsedSec: t.getStepElapsedSec()
       };
     });
 
@@ -79,7 +83,8 @@ export class HourForgeEngine {
       profileId: this.profile?.id || 'regular',
       runSeed: this.runSeed,
       tracks: trackSnapshots,
-      lastSnapshotUtc: Date.now()
+      lastSnapshotUtc: Date.now(),
+      customPattern: this.customPattern || undefined
     };
   }
 
@@ -105,6 +110,7 @@ export class HourForgeEngine {
     this.runId = `run_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     this.mode = valid.mode as RunMode;
     this.profile = options.profile;
+    this.customPattern = (valid as any).customPattern || options.customPattern || null;
     this.runSeed = valid.runSeed || `seed_${Date.now()}`;
     this.t0Utc = Date.now() + (valid.delayMs || 0);
     this.status = valid.delayMs ? 'STARTING' : 'RUNNING';
@@ -120,7 +126,8 @@ export class HourForgeEngine {
         profile: this.profile,
         targetSeconds: targetSec,
         dailyQuotaSeconds: dailySec,
-        t0Utc: this.t0Utc
+        t0Utc: this.t0Utc,
+        customPattern: this.customPattern || undefined
       });
       this.tracks.set(t.appId, sm);
     }
@@ -192,13 +199,36 @@ export class HourForgeEngine {
     }
   }
 
+  extendRest(appId: number, seconds: number): void {
+    const track = this.tracks.get(appId);
+    if (track) {
+      track.extendRest(seconds);
+      this.broadcastState();
+    }
+  }
+
   async restoreFromSnapshot(snapshot: RunStateSnapshot, profile: HumanProfile): Promise<void> {
     this.runId = snapshot.runId;
     this.mode = snapshot.mode;
-    this.profile = profile;
+    this.customPattern = snapshot.customPattern || null;
+    
+    // Clamp profile rest bounds to 60m if older snapshot profile exceeded 60m
+    const clampedProfile: HumanProfile = {
+      ...profile,
+      rest: {
+        ...profile.rest,
+        minMin: Math.min(60, profile.rest.minMin),
+        maxMin: Math.min(60, profile.rest.maxMin),
+        longMinMin: Math.min(60, profile.rest.longMinMin),
+        longMaxMin: Math.min(60, profile.rest.longMaxMin)
+      }
+    };
+    this.profile = clampedProfile;
     this.runSeed = snapshot.runSeed;
     this.t0Utc = snapshot.t0Utc;
     this.status = 'RUNNING';
+
+    const gapMs = snapshot.lastSnapshotUtc ? Date.now() - snapshot.lastSnapshotUtc : 0;
 
     this.tracks.clear();
     for (const ts of snapshot.tracks) {
@@ -209,13 +239,16 @@ export class HourForgeEngine {
         profile: this.profile,
         targetSeconds: ts.targetSeconds,
         dailyQuotaSeconds: ts.dailyQuotaSeconds,
-        t0Utc: this.t0Utc
+        t0Utc: this.t0Utc,
+        customPattern: this.customPattern || undefined,
+        initialStepIndex: ts.customStepIndex,
+        initialStepElapsedSec: ts.stepElapsedSec
       });
       if (ts.todayCreditedSeconds !== undefined) {
         sm.setTodayCreditedSeconds(ts.todayCreditedSeconds);
       }
-      // Replan starting from remaining credited time
-      sm.replan(Date.now());
+      // Replan immediately starting from current time
+      sm.replan(Date.now(), gapMs);
       this.tracks.set(ts.appId, sm);
     }
 
@@ -255,6 +288,11 @@ export class HourForgeEngine {
     if (wallDeltaMs - monoDeltaMs > 60000) {
       // PC woke from sleep
       this.setGlobalOverlay('SUSPENDED');
+      if (this.customPattern && wallDeltaMs >= 30 * 60 * 1000) {
+        for (const track of this.tracks.values()) {
+          track.replan(nowWall, wallDeltaMs);
+        }
+      }
       setTimeout(() => this.setGlobalOverlay(null), 2000);
     }
 

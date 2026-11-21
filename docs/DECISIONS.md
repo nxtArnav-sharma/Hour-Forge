@@ -359,3 +359,32 @@
   5. **Dashboard Mode & Track Resolution**:
      - Dashboard header displays the friendly mode name (`"Dedicated Run"`, `"Single Game Run"`, `"Catch-Up Run"`, `"Multi-Game Run"`).
      - Track names and cover art are resolved strictly from the library (`game.name`, `game.headerImage`), falling back to `'Game Not in Library'` if missing.
+
+
+---
+
+## DEC-022: Rest Cap — 60-Minute Hard Ceiling for All Rhythm Profiles
+
+### Context
+In version 0.1.2 and earlier, rhythm presets allowed sampled breaks (particularly long rests) up to 90–180 minutes. While realistic for extended away-from-keyboard breaks, user experience and playtime pacing revealed that breaks longer than 60 minutes felt unresponsive, caused prolonged idle periods, and artificially constrained achievable playtime hours during catch-up goals.
+
+### Decision
+1. Define a global constant `MAX_BREAK_SECONDS = 3600` (60 minutes) in `src/core` and enforce it across all sampling, planning, multi-track collision shifting, snapshot restoration, and manual extensions.
+2. Off-hours waits (`active_window` sleep protection and `daily_cap` waits) are not classified as breaks and remain untruncated.
+3. Updated built-in preset bounds:
+   - **Casual**: play 45–120 min, rest 5–30 min, 15% long rest 35–60 min (was 45–120 min long rest).
+   - **Regular**: play 60–180 min, rest 5–45 min, 20% long rest 45–60 min (was 60–150 min long rest).
+   - **Grinder**: play 90–240 min, rest 3–20 min, 10% long rest 30–60 min (was 30–90 min long rest).
+   - **Weekend Warrior**: weekday play 30–90 min, rest 10–45 min, 25% long rest 45–60 min (was 60–180 min long rest).
+   - **Fast Test**: unchanged.
+4. Profile editor UI enforces `max="60"` on all rest inputs with the notice: *"Breaks are limited to 60 minutes."*
+5. Legacy snapshots and backups with rest configurations >60 min automatically clamp to 60 min on import and load.
+
+### Duty Cycle & Pacing Recomputation (Before vs After)
+
+| Preset | Mean Rest Before | Mean Rest After | Duty Cycle Before | Duty Cycle After | Max Achievable Play / 16h Window |
+|---|---|---|---|---|---|
+| **Casual** | 27.3 min | 22.0 min | 75.2% | **78.9%** | 12.6 hrs |
+| **Regular** | 41.0 min | 30.5 min | 74.5% | **79.7%** | 12.8 hrs |
+| **Grinder** | 16.4 min | 14.9 min | 91.0% | **91.7%** | 14.7 hrs |
+| **Weekend Warrior** | 56.3 min | 33.8 min | 51.6% (wkday) / 65.8% (wknd) | **64.0% (wkday) / 76.2% (wknd)** | 10.2 hrs (wkday) / 12.2 hrs (wknd) |
